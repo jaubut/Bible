@@ -6,6 +6,13 @@ import type { Bible } from "@/lib/bible-api";
 
 type Mode = "ethiopian" | "english" | "french" | "all";
 
+const MODE_LABEL: Record<Mode, string> = {
+  ethiopian: "Ethiopian",
+  english: "English",
+  french: "French",
+  all: "All",
+};
+
 export default function LanguagePicker() {
   const [mode, setMode] = useState<Mode>("ethiopian");
   const [bibles, setBibles] = useState<Bible[] | null>(null);
@@ -41,30 +48,47 @@ export default function LanguagePicker() {
 
   return (
     <div>
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap" role="tablist" aria-label="Language filter">
         {(["ethiopian", "english", "french", "all"] as const).map((m) => (
           <button
             key={m}
+            role="tab"
+            aria-selected={mode === m}
             onClick={() => setMode(m)}
-            className={`rounded-full px-4 py-1.5 text-sm border transition ${
+            className={`rounded-full px-4 min-h-[40px] text-sm border transition ${
               mode === m
-                ? "bg-[color:var(--color-ink)] text-[color:var(--color-parchment)] border-[color:var(--color-ink)]"
-                : "border-[color:var(--color-aside)]/40 hover:bg-[color:var(--color-ink)]/5"
+                ? "bg-[color:var(--color-ink)] text-[color:var(--color-bg)] border-[color:var(--color-ink)]"
+                : "border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5"
             }`}
           >
-            {m === "ethiopian" ? "Ethiopian" : m === "english" ? "English" : m === "french" ? "French" : "All"}
+            {MODE_LABEL[m]}
           </button>
         ))}
       </div>
 
       <div className="mt-5">
-        {loading && <p className="text-sm text-[color:var(--color-aside)]">Loading…</p>}
+        {loading && (
+          <p className="text-sm text-[color:var(--color-aside)]">Loading…</p>
+        )}
         {error && <p className="text-sm text-red-700">Error: {error}</p>}
         {bibles && bibles.length === 0 && !loading && (
-          <p className="text-sm text-[color:var(--color-aside)]">
-            No bibles available for this filter on your api.bible account.
-            {mode === "ethiopian" && " The full Ethiopian Tewahedo canon (Enoch, Jubilees, etc.) is generally not on api.bible."}
-          </p>
+          <div className="rounded-xl border border-[color:var(--color-divider)] bg-[color:var(--color-surface)] p-4 text-sm text-[color:var(--color-aside)] leading-relaxed">
+            <p className="font-medium text-[color:var(--color-ink)]">
+              No Bibles for this filter.
+            </p>
+            {mode === "ethiopian" && (
+              <p className="mt-2">
+                Your api.bible plan currently does not include Amharic, Ge&apos;ez,
+                Tigrinya, or Oromo translations. To unlock them: open your{" "}
+                <Link href="https://scripture.api.bible/admin" className="underline">
+                  api.bible dashboard
+                </Link>
+                {" "}→ <em>Plan</em> tab → request access to the language. Each Ethiopian
+                publisher (Bible Society of Ethiopia, etc.) approves access individually.
+                The full Tewahedo canon (Enoch, Jubilees) is generally not on api.bible at all.
+              </p>
+            )}
+          </div>
         )}
         {bibles && bibles.length > 0 && (
           <ul className="grid gap-2 sm:grid-cols-2">
@@ -72,10 +96,10 @@ export default function LanguagePicker() {
               <li key={b.id}>
                 <Link
                   href={`/read/${b.id}`}
-                  className="block rounded-lg border border-[color:var(--color-aside)]/30 px-4 py-3 hover:bg-[color:var(--color-ink)]/5"
+                  className="block rounded-xl border border-[color:var(--color-divider)] bg-[color:var(--color-surface)] px-4 py-3 hover:bg-[color:var(--color-ink)]/5 transition min-h-[64px]"
                 >
                   <div className="font-medium">{b.nameLocal || b.name}</div>
-                  <div className="text-xs text-[color:var(--color-aside)]">
+                  <div className="text-xs text-[color:var(--color-aside)] mt-0.5">
                     {b.language.nameLocal || b.language.name} · {b.abbreviationLocal || b.abbreviation}
                   </div>
                 </Link>

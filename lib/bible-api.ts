@@ -1,4 +1,4 @@
-const BASE = "https://api.scripture.api.bible/v1";
+const BASE = "https://rest.api.bible/v1";
 
 function key() {
   const k = process.env.BIBLE_API_KEY;
@@ -66,7 +66,7 @@ export const bibleApi = {
     ),
 };
 
-const ETHIOPIAN_LANG_CODES = ["amh", "gez", "tir", "orm"];
+const ETHIOPIAN_LANG_CODES = ["amh", "gez", "tir", "orm", "gaz"];
 
 export function isEthiopian(b: Bible): boolean {
   return ETHIOPIAN_LANG_CODES.includes(b.language.id);

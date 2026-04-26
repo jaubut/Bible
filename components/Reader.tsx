@@ -5,6 +5,9 @@ import Link from "next/link";
 import { Pause, Play, SkipForward, Square } from "lucide-react";
 import type { Book } from "@/lib/bible-api";
 import { parseScript, type Segment } from "@/lib/script";
+import { STORAGE_KEYS } from "@/lib/settings";
+import { listVoices, onVoicesReady } from "@/lib/voices";
+import Settings from "@/components/Settings";
 
 type Props = {
   bibleId: string;
@@ -21,6 +24,8 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [density, setDensity] = useState<"light" | "normal" | "rich">("normal");
+  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const [rate, setRate] = useState(0.95);
 
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
   const queueRef = useRef<number>(0);
@@ -29,6 +34,32 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
     const [b, c] = passageId.split(".");
     return [b, Number(c || "1")];
   }, [passageId]);
+
+  // Load voice + rate from settings; refresh whenever Settings updates them
+  useEffect(() => {
+    function refresh() {
+      const uri = localStorage.getItem(STORAGE_KEYS.voiceURI);
+      const all = listVoices();
+      const v = uri ? all.find((rv) => rv.voice.voiceURI === uri)?.voice : null;
+      setSelectedVoice(v ?? null);
+      const r = parseFloat(localStorage.getItem(STORAGE_KEYS.voiceRate) ?? "0.95");
+      if (!Number.isNaN(r)) setRate(r);
+    }
+    refresh();
+    const off = onVoicesReady(refresh);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEYS.voiceURI || e.key === STORAGE_KEYS.voiceRate) refresh();
+    };
+    window.addEventListener("storage", onStorage);
+    // Also poll on focus — same-tab Settings changes don't fire storage events
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      off();
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
 
   // Fetch the companion script whenever passage or density changes
   useEffect(() => {
@@ -108,8 +139,9 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
     }
 
     const u = new SpeechSynthesisUtterance(seg.text);
-    u.rate = seg.kind === "aside" ? 0.95 : 0.9;
-    u.pitch = seg.kind === "aside" ? 1.0 : 1.0;
+    if (selectedVoice) u.voice = selectedVoice;
+    u.rate = rate * (seg.kind === "aside" ? 1.05 : 1);
+    u.pitch = 1.0;
     u.volume = 1;
     u.onend = () => {
       queueRef.current = idx + 1;
@@ -145,19 +177,31 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <header className="flex items-baseline justify-between">
-        <Link href="/" className="text-sm text-[color:var(--color-aside)] hover:underline">
+    <main
+      className="mx-auto max-w-3xl px-5 sm:px-6 pt-6 pb-32"
+      style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}
+    >
+      <header className="flex items-center justify-between gap-3">
+        <Link
+          href="/"
+          className="inline-flex h-11 items-center text-sm text-[color:var(--color-aside)] hover:underline"
+        >
           ← All translations
         </Link>
-        <div className="text-xs text-[color:var(--color-aside)]">{bibleId}</div>
+        <div className="flex items-center gap-2">
+          <span className="hidden sm:inline text-xs text-[color:var(--color-aside)]">
+            {bibleId}
+          </span>
+          <Settings />
+        </div>
       </header>
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
+      <div className="mt-5 grid grid-cols-2 sm:grid-cols-[1fr_auto_auto] gap-2 sm:gap-3">
         <select
           value={bookId}
           onChange={(e) => setPassageId(`${e.target.value}.1`)}
-          className="rounded-md border border-[color:var(--color-aside)]/40 bg-transparent px-3 py-1.5"
+          className="rounded-lg border border-[color:var(--color-divider)] bg-transparent px-3 py-3 min-h-[44px] col-span-2 sm:col-span-1"
+          aria-label="Book"
         >
           {books.map((b) => (
             <option key={b.id} value={b.id}>
@@ -170,48 +214,23 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
           min={1}
           value={chapter}
           onChange={(e) => setPassageId(`${bookId}.${Math.max(1, Number(e.target.value))}`)}
-          className="w-20 rounded-md border border-[color:var(--color-aside)]/40 bg-transparent px-3 py-1.5"
+          className="rounded-lg border border-[color:var(--color-divider)] bg-transparent px-3 py-3 min-h-[44px]"
+          aria-label="Chapter"
         />
         <select
           value={density}
           onChange={(e) => setDensity(e.target.value as "light" | "normal" | "rich")}
-          className="rounded-md border border-[color:var(--color-aside)]/40 bg-transparent px-3 py-1.5"
+          className="rounded-lg border border-[color:var(--color-divider)] bg-transparent px-3 py-3 min-h-[44px]"
+          aria-label="Commentary density"
           title="How much commentary"
         >
           <option value="light">Light</option>
           <option value="normal">Normal</option>
           <option value="rich">Rich</option>
         </select>
-
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => (playing ? pause() : play(activeIdx ?? 0))}
-            disabled={!segments.length}
-            className="rounded-full bg-[color:var(--color-ink)] p-2 text-[color:var(--color-parchment)] disabled:opacity-40"
-            aria-label={playing ? "Pause" : "Play"}
-          >
-            {playing ? <Pause size={18} /> : <Play size={18} />}
-          </button>
-          <button
-            onClick={next}
-            disabled={!segments.length}
-            className="rounded-full border border-[color:var(--color-aside)]/40 p-2 disabled:opacity-40"
-            aria-label="Next segment"
-          >
-            <SkipForward size={18} />
-          </button>
-          <button
-            onClick={stop}
-            disabled={!segments.length}
-            className="rounded-full border border-[color:var(--color-aside)]/40 p-2 disabled:opacity-40"
-            aria-label="Stop"
-          >
-            <Square size={18} />
-          </button>
-        </div>
       </div>
 
-      <article className="prose prose-stone mt-8 max-w-none">
+      <article className="prose-stone mt-8 max-w-none text-[17px] leading-[1.75]">
         {loading && !segments.length && (
           <p className="text-[color:var(--color-aside)]">Preparing the companion…</p>
         )}
@@ -223,8 +242,8 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
             return (
               <p
                 key={i}
-                className={`my-3 italic text-[color:var(--color-aside)] border-l-2 border-[color:var(--color-aside)]/40 pl-3 ${
-                  active ? "bg-[color:var(--color-ink)]/5" : ""
+                className={`my-3 italic text-[color:var(--color-aside)] border-l-2 border-[color:var(--color-divider)] pl-3 ${
+                  active ? "read-active" : ""
                 }`}
               >
                 {s.text}
@@ -233,14 +252,49 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
           return (
             <p
               key={i}
-              className={`my-2 leading-relaxed ${active ? "bg-[color:var(--color-ink)]/5 rounded" : ""}`}
+              className={`my-2 ${active ? "read-active" : ""}`}
             >
-              {s.verse ? <sup className="mr-1 text-xs text-[color:var(--color-aside)]">{s.verse}</sup> : null}
+              {s.verse ? (
+                <sup className="mr-1 text-xs text-[color:var(--color-aside)]">{s.verse}</sup>
+              ) : null}
               {s.text}
             </p>
           );
         })}
       </article>
+
+      {/* Sticky transport bar — bottom of screen */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-[color:var(--color-divider)] bg-[color:var(--color-surface)]/95 backdrop-blur"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="mx-auto max-w-3xl px-5 sm:px-6 py-3 flex items-center justify-center gap-3">
+          <button
+            onClick={stop}
+            disabled={!segments.length}
+            className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5 disabled:opacity-40 transition"
+            aria-label="Stop"
+          >
+            <Square size={18} />
+          </button>
+          <button
+            onClick={() => (playing ? pause() : play(activeIdx ?? 0))}
+            disabled={!segments.length}
+            className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--color-ink)] text-[color:var(--color-bg)] disabled:opacity-40 transition hover:opacity-90"
+            aria-label={playing ? "Pause" : "Play"}
+          >
+            {playing ? <Pause size={22} /> : <Play size={22} />}
+          </button>
+          <button
+            onClick={next}
+            disabled={!segments.length}
+            className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5 disabled:opacity-40 transition"
+            aria-label="Next segment"
+          >
+            <SkipForward size={18} />
+          </button>
+        </div>
+      </div>
 
       {process.env.NODE_ENV === "development" && script && (
         <details className="mt-10 text-xs text-[color:var(--color-aside)]">
