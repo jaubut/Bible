@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Pause, Play, SkipForward, Square, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Pause, Play, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Book } from "@/lib/bible-api";
 import { parseScript, parsePodcast, type Segment } from "@/lib/script";
 import { defaultPair } from "@/lib/google-voices";
@@ -21,16 +22,26 @@ import {
   isIOS,
   isAppleDesktop,
 } from "@/lib/voices";
+import { saveLastRead } from "@/lib/last-read";
 import Settings from "@/components/Settings";
 
 type Props = {
   bibleId: string;
+  bookId: string;
   books: Book[];
   initialPassageId: string;
+  modeOverride?: "podcast" | "reading";
 };
 
-export default function Reader({ bibleId, books, initialPassageId }: Props) {
-  const [passageId, setPassageId] = useState(initialPassageId);
+export default function Reader({
+  bibleId,
+  bookId,
+  books,
+  initialPassageId,
+  modeOverride,
+}: Props) {
+  const router = useRouter();
+  const [passageId] = useState(initialPassageId);
   const [script, setScript] = useState("");
   const [segments, setSegments] = useState<Segment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -56,10 +67,44 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
   const queueRef = useRef<number>(0);
 
-  const [bookId, chapter] = useMemo(() => {
-    const [b, c] = passageId.split(".");
-    return [b, Number(c || "1")];
+  const chapter = useMemo(() => {
+    const c = passageId.split(".").pop();
+    return Number(c || "1");
   }, [passageId]);
+
+  const currentBook = useMemo(
+    () => books.find((b) => b.id === bookId) ?? books[0],
+    [books, bookId],
+  );
+
+  // Persist as last-read for the home Continue card
+  useEffect(() => {
+    if (!currentBook) return;
+    saveLastRead({
+      bibleId,
+      bookId,
+      bookName: currentBook.name,
+      chapter: String(chapter),
+      ts: Date.now(),
+    });
+  }, [bibleId, bookId, currentBook, chapter]);
+
+  // If modeOverride is provided via URL, write it to localStorage so the
+  // Settings panel and the rest of the Reader pick it up.
+  useEffect(() => {
+    if (modeOverride) {
+      localStorage.setItem(STORAGE_KEYS.mode, modeOverride);
+      setMode(modeOverride);
+    }
+  }, [modeOverride]);
+
+  function gotoChapter(delta: number) {
+    const next = chapter + delta;
+    if (next < 1) return;
+    router.push(
+      `/read/${encodeURIComponent(bibleId)}/${encodeURIComponent(bookId)}/${next}`,
+    );
+  }
 
   // Load voice + rate from settings; refresh whenever Settings updates them
   useEffect(() => {
@@ -442,65 +487,52 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
       className="mx-auto max-w-3xl px-5 sm:px-6 pt-6 pb-32"
       style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}
     >
-      <header className="flex items-center justify-between gap-3">
+      <header className="flex items-center justify-between gap-3 mb-6">
         <Link
-          href="/"
-          className="inline-flex h-11 items-center text-sm text-[color:var(--color-aside)] hover:underline"
+          href={`/read/${encodeURIComponent(bibleId)}/${encodeURIComponent(bookId)}`}
+          className="btn-ghost text-sm"
+          aria-label="Back to chapters"
         >
-          ← All translations
+          ← {currentBook?.name ?? "Chapters"}
         </Link>
-        <div className="flex items-center gap-2">
-          <span className="hidden sm:inline text-xs text-[color:var(--color-aside)]">
-            {bibleId}
-          </span>
-          <Settings />
-        </div>
+        <Settings />
       </header>
 
-      <div
-        className={`mt-5 grid grid-cols-2 gap-2 sm:gap-3 ${
-          mode === "podcast"
-            ? "sm:grid-cols-[1fr_auto]"
-            : "sm:grid-cols-[1fr_auto_auto]"
-        }`}
-      >
-        <select
-          value={bookId}
-          onChange={(e) => setPassageId(`${e.target.value}.1`)}
-          className="rounded-lg border border-[color:var(--color-divider)] bg-transparent px-3 py-3 min-h-[44px] col-span-2 sm:col-span-1"
-          aria-label="Book"
-        >
-          {books.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-        <input
-          type="number"
-          min={1}
-          value={chapter}
-          onChange={(e) => setPassageId(`${bookId}.${Math.max(1, Number(e.target.value))}`)}
-          className="rounded-lg border border-[color:var(--color-divider)] bg-transparent px-3 py-3 min-h-[44px]"
-          aria-label="Chapter"
-        />
-        {mode === "reading" && (
+      <div className="mb-2">
+        <h1 className="t-section">
+          {currentBook?.name} {chapter}
+        </h1>
+        <div className="t-caption text-[color:var(--color-aside)] mt-1">
+          {mode === "podcast" ? (
+            <>Podcast mode — two hosts in conversation</>
+          ) : (
+            <>Reading mode — verses with cultural asides</>
+          )}
+        </div>
+      </div>
+
+      {mode === "reading" && (
+        <div className="mb-4 flex items-center gap-2">
+          <span className="t-caption text-[color:var(--color-aside)]">
+            Density:
+          </span>
           <select
             value={density}
-            onChange={(e) => setDensity(e.target.value as "light" | "normal" | "rich")}
-            className="rounded-lg border border-[color:var(--color-divider)] bg-transparent px-3 py-3 min-h-[44px]"
+            onChange={(e) =>
+              setDensity(e.target.value as "light" | "normal" | "rich")
+            }
+            className="rounded-md bg-transparent text-sm py-1.5 pl-1 pr-6 hover:bg-[color:var(--color-tint)] cursor-pointer"
             aria-label="Commentary density"
-            title="How much commentary"
           >
             <option value="light">Light</option>
             <option value="normal">Normal</option>
             <option value="rich">Rich</option>
           </select>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Mode badge to make active mode visible at a glance */}
-      <div className="mt-2 text-xs text-[color:var(--color-aside)]">
+      <div className="hidden text-xs text-[color:var(--color-aside)]">
         {mode === "podcast" ? (
           <>
             Podcast mode — two hosts in conversation. Change in{" "}
@@ -656,15 +688,15 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
           )}
           <div className="flex items-center justify-center gap-3">
             <button
-              onClick={mode === "podcast" ? back15 : stop}
-              disabled={mode === "podcast" ? !audioUrl : !segments.length}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5 disabled:opacity-40 transition"
-              aria-label={mode === "podcast" ? "Back 15 seconds" : "Stop"}
+              onClick={mode === "podcast" ? back15 : () => gotoChapter(-1)}
+              disabled={mode === "podcast" ? !audioUrl : chapter <= 1}
+              className="inline-flex h-12 w-12 items-center justify-center rounded-full hover:bg-[color:var(--color-tint)] disabled:opacity-40 transition"
+              aria-label={mode === "podcast" ? "Back 15 seconds" : "Previous chapter"}
             >
               {mode === "podcast" ? (
                 <span className="text-xs font-medium tabular-nums">−15</span>
               ) : (
-                <Square size={18} />
+                <ChevronLeft size={20} />
               )}
             </button>
             <button
@@ -682,15 +714,15 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
               )}
             </button>
             <button
-              onClick={next}
-              disabled={mode === "podcast" ? !audioUrl : !segments.length}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5 disabled:opacity-40 transition"
-              aria-label={mode === "podcast" ? "Forward 15 seconds" : "Next segment"}
+              onClick={mode === "podcast" ? next : () => gotoChapter(1)}
+              disabled={mode === "podcast" ? !audioUrl : false}
+              className="inline-flex h-12 w-12 items-center justify-center rounded-full hover:bg-[color:var(--color-tint)] disabled:opacity-40 transition"
+              aria-label={mode === "podcast" ? "Forward 15 seconds" : "Next chapter"}
             >
               {mode === "podcast" ? (
                 <span className="text-xs font-medium tabular-nums">+15</span>
               ) : (
-                <SkipForward size={18} />
+                <ChevronRight size={20} />
               )}
             </button>
           </div>

@@ -267,7 +267,7 @@ export default function Settings() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5 transition"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-[color:var(--color-tint)] transition"
         aria-label="Open settings"
       >
         <SettingsIcon size={18} />
@@ -306,41 +306,9 @@ export default function Settings() {
             </header>
 
             <div className="px-5 py-5 space-y-8">
-              {/* Theme */}
+              {/* Mode (most-changed first) */}
               <section>
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
-                  Theme
-                </h3>
-                <div className="grid gap-2">
-                  {THEMES.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => applyTheme(t.id)}
-                      className={`group relative flex items-center gap-3 rounded-xl border p-3 text-left transition min-h-[56px] ${
-                        theme === t.id
-                          ? "border-[color:var(--color-ink)] bg-[color:var(--color-ink)]/5"
-                          : "border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5"
-                      }`}
-                      aria-pressed={theme === t.id}
-                    >
-                      <ThemeSwatch id={t.id} />
-                      <div className="flex-1">
-                        <div className="font-medium">{t.name}</div>
-                        <div className="text-xs text-[color:var(--color-aside)]">
-                          {t.description}
-                        </div>
-                      </div>
-                      {theme === t.id && (
-                        <Check size={18} className="text-[color:var(--color-ink)]" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              {/* Mode */}
-              <section>
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
+                <h3 className="t-caption font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
                   Mode
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
@@ -348,15 +316,18 @@ export default function Settings() {
                     <button
                       key={m.id}
                       onClick={() => applyMode(m.id)}
-                      className={`rounded-xl border px-3 py-2.5 min-h-[64px] text-left transition ${
+                      className={`rounded-xl px-3 py-3 min-h-[64px] text-left transition ${
                         mode === m.id
-                          ? "border-[color:var(--color-ink)] bg-[color:var(--color-ink)]/5"
-                          : "border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5"
+                          ? "bg-[color:var(--color-ink)]/8"
+                          : "hover:bg-[color:var(--color-tint)]"
                       }`}
                       aria-pressed={mode === m.id}
                     >
-                      <div className="text-sm font-medium">{m.name}</div>
-                      <div className="text-xs text-[color:var(--color-aside)] mt-0.5">
+                      <div className="text-sm font-medium flex items-center gap-1.5">
+                        {m.name}
+                        {mode === m.id && <Check size={14} />}
+                      </div>
+                      <div className="t-caption text-[color:var(--color-aside)] mt-0.5">
                         {m.description}
                       </div>
                     </button>
@@ -366,7 +337,7 @@ export default function Settings() {
 
               {/* Companion Language */}
               <section>
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
+                <h3 className="t-caption font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
                   Companion language
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
@@ -374,10 +345,10 @@ export default function Settings() {
                     <button
                       key={l.id}
                       onClick={() => applyCompanionLang(l.id)}
-                      className={`rounded-xl border px-3 min-h-[48px] text-sm transition ${
+                      className={`rounded-xl px-3 min-h-[48px] text-sm transition ${
                         companionLang === l.id
-                          ? "border-[color:var(--color-ink)] bg-[color:var(--color-ink)]/5"
-                          : "border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5"
+                          ? "bg-[color:var(--color-ink)]/8 font-medium"
+                          : "hover:bg-[color:var(--color-tint)]"
                       }`}
                       aria-pressed={companionLang === l.id}
                     >
@@ -385,9 +356,41 @@ export default function Settings() {
                     </button>
                   ))}
                 </div>
-                <p className="mt-2 text-xs text-[color:var(--color-aside)] leading-relaxed">
+                <p className="mt-2 t-caption text-[color:var(--color-aside)] leading-relaxed">
                   Verses stay in the Bible&apos;s original language. The companion&apos;s asides — and a brief gloss after each verse in another language — appear in your chosen language.
                 </p>
+              </section>
+
+              {/* Theme */}
+              <section>
+                <h3 className="t-caption font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
+                  Theme
+                </h3>
+                <div className="grid gap-1.5">
+                  {THEMES.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => applyTheme(t.id)}
+                      className={`group relative flex items-center gap-3 rounded-xl p-3 text-left transition min-h-[56px] ${
+                        theme === t.id
+                          ? "bg-[color:var(--color-ink)]/8"
+                          : "hover:bg-[color:var(--color-tint)]"
+                      }`}
+                      aria-pressed={theme === t.id}
+                    >
+                      <ThemeSwatch id={t.id} />
+                      <div className="flex-1">
+                        <div className="font-medium">{t.name}</div>
+                        <div className="t-caption text-[color:var(--color-aside)]">
+                          {t.description}
+                        </div>
+                      </div>
+                      {theme === t.id && (
+                        <Check size={18} className="text-[color:var(--color-ink)]" />
+                      )}
+                    </button>
+                  ))}
+                </div>
               </section>
 
               {/* Voice(s) */}

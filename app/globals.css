@@ -1,51 +1,61 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #f7f1e3;
-  --color-ink: #2a2522;
+  --color-bg: #faf8f2;
+  --color-surface: #ffffff;
+  --color-ink: #1f1b17;
   --color-aside: #6b5a3e;
   --color-accent: #8b6f3a;
-  --color-surface: #fbf6e6;
-  --color-divider: rgba(107, 90, 62, 0.25);
+  --color-divider: rgba(31, 27, 23, 0.08);
+  --color-tint: rgba(31, 27, 23, 0.04);
+
+  /* Type */
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-display: ui-serif, Georgia, Cambria, serif;
-  --shadow-soft: 0 1px 3px rgba(42, 37, 34, 0.06), 0 4px 12px rgba(42, 37, 34, 0.04);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
-  /* preserve old aliases used by existing components */
+  /* Shadows — soft, Notion-style */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-pop: 0 2px 6px rgba(0, 0, 0, 0.06), 0 12px 32px rgba(0, 0, 0, 0.08);
+
+  /* Back-compat for older components still referencing parchment */
   --color-parchment: var(--color-bg);
 }
 
 /* Theme: Parchment — warm cream + sepia ink, classical reading */
 :root,
 [data-theme="parchment"] {
-  --color-bg: #f7f1e3;
-  --color-ink: #2a2522;
+  --color-bg: #faf8f2;
+  --color-surface: #ffffff;
+  --color-ink: #1f1b17;
   --color-aside: #6b5a3e;
   --color-accent: #8b6f3a;
-  --color-surface: #fbf6e6;
-  --color-divider: rgba(107, 90, 62, 0.25);
+  --color-divider: rgba(31, 27, 23, 0.08);
+  --color-tint: rgba(31, 27, 23, 0.04);
   --color-parchment: var(--color-bg);
 }
 
 /* Theme: Codex — dark walnut + gold, manuscript by candlelight */
 [data-theme="codex"] {
-  --color-bg: #1a140f;
-  --color-ink: #e8d9b8;
+  --color-bg: #14110d;
+  --color-surface: #1c1814;
+  --color-ink: #efe4cc;
   --color-aside: #b89968;
   --color-accent: #d4a857;
-  --color-surface: #221a13;
-  --color-divider: rgba(184, 153, 104, 0.3);
+  --color-divider: rgba(239, 228, 204, 0.08);
+  --color-tint: rgba(239, 228, 204, 0.04);
   --color-parchment: var(--color-bg);
 }
 
-/* Theme: Sanctuary — pure white, slate ink, modern liturgical */
+/* Theme: Sanctuary — soft white, slate, modern liturgical */
 [data-theme="sanctuary"] {
-  --color-bg: #ffffff;
+  --color-bg: #fafaf9;
+  --color-surface: #ffffff;
   --color-ink: #1f2937;
   --color-aside: #6b7280;
   --color-accent: #475569;
-  --color-surface: #f8fafc;
-  --color-divider: rgba(107, 114, 128, 0.2);
+  --color-divider: rgba(31, 41, 55, 0.06);
+  --color-tint: rgba(31, 41, 55, 0.03);
   --color-parchment: var(--color-bg);
 }
 
@@ -70,7 +80,129 @@ input, select, textarea {
   border-radius: 6px;
 }
 
-/* Scrollbar polish */
+/* ─── Typography utilities ───────────────────────────── */
+.t-display {
+  font-size: clamp(2.5rem, 5vw, 3.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+.t-section {
+  font-size: clamp(1.375rem, 2.5vw, 1.75rem);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+.t-subsection {
+  font-size: 1.125rem;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.t-body {
+  font-size: 17px;
+  line-height: 1.7;
+}
+@media (min-width: 768px) {
+  .t-body { font-size: 18px; }
+}
+.t-reader {
+  font-size: 19px;
+  line-height: 1.8;
+}
+.t-caption {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* ─── Card primitive ─────────────────────────────────── */
+.card {
+  background: var(--color-surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+}
+.card-flat {
+  background: var(--color-surface);
+  border-radius: 16px;
+  border: 1px solid var(--color-divider);
+}
+.card:hover, .card-flat:hover {
+  box-shadow: var(--shadow-pop);
+  transition: box-shadow 0.2s ease-out;
+}
+
+/* ─── Button primitives ──────────────────────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--color-ink);
+  color: var(--color-bg);
+  border-radius: 9999px;
+  padding: 0.75rem 1.25rem;
+  min-height: 44px;
+  font-weight: 500;
+  font-size: 15px;
+  transition: opacity 0.15s ease-out, transform 0.1s ease-out;
+}
+.btn-primary:hover { opacity: 0.92; }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: transparent;
+  color: var(--color-ink);
+  border: 1px solid var(--color-divider);
+  border-radius: 9999px;
+  padding: 0.625rem 1.125rem;
+  min-height: 40px;
+  font-size: 14px;
+  transition: background-color 0.15s ease-out;
+}
+.btn-outline:hover { background: var(--color-tint); }
+.btn-outline:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: transparent;
+  color: var(--color-ink);
+  border-radius: 9999px;
+  padding: 0.5rem 1rem;
+  min-height: 40px;
+  font-size: 14px;
+  transition: background-color 0.15s ease-out;
+}
+.btn-ghost:hover { background: var(--color-tint); }
+
+/* ─── Pill / filter chip ─────────────────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 9999px;
+  font-size: 14px;
+  border: 1px solid var(--color-divider);
+  background: transparent;
+  color: var(--color-ink);
+  transition: background-color 0.15s ease-out, color 0.15s ease-out;
+}
+.pill:hover { background: var(--color-tint); }
+.pill[aria-selected="true"],
+.pill.active {
+  background: var(--color-ink);
+  color: var(--color-bg);
+  border-color: var(--color-ink);
+}
+
+/* ─── Scrollbar polish ───────────────────────────────── */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb {
   background: var(--color-divider);
