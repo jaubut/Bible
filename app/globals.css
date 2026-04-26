@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --color-parchment: #f7f1e3;
+  --color-ink: #2a2522;
+  --color-aside: #6b5a3e;
+  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--color-parchment);
+  color: var(--color-ink);
+  font-family: var(--font-serif);
+  -webkit-font-smoothing: antialiased;
+}
