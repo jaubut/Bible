@@ -96,6 +96,75 @@ export function pickBest(langPref?: string): SpeechSynthesisVoice | null {
   return ranked[0]?.voice ?? null;
 }
 
+// Heuristic gender by Apple/Google/Microsoft voice name. Used to pick
+// complementary voices for the two-host podcast mode.
+const FEMALE_NAMES = new Set([
+  "Samantha",
+  "Karen",
+  "Moira",
+  "Tessa",
+  "Serena",
+  "Allison",
+  "Ava",
+  "Susan",
+  "Nicky",
+  "Évelyne",
+  "Evelyne",
+  "Amélie",
+  "Amelie",
+  "Audrey",
+  "Aria",
+  "Sylvie",
+  "Chloe",
+  "Joanna",
+  "Salli",
+  "Zira",
+]);
+const MALE_NAMES = new Set([
+  "Daniel",
+  "Tom",
+  "Alex",
+  "Aaron",
+  "Thomas",
+  "Fred",
+  "Jorge",
+  "Diego",
+  "Guy",
+  "Henri",
+  "David",
+  "Mark",
+]);
+
+function inferGender(v: SpeechSynthesisVoice): "f" | "m" | "unknown" {
+  const first = v.name.split(/\s+|\(|—|–|-/)[0];
+  if (FEMALE_NAMES.has(first)) return "f";
+  if (MALE_NAMES.has(first)) return "m";
+  const lower = v.name.toLowerCase();
+  if (lower.includes("female")) return "f";
+  if (lower.includes("male")) return "m";
+  return "unknown";
+}
+
+// Pick two distinct voices for the two-host mode. Prefers one female + one
+// male in the requested language, both as high-quality as possible.
+export function pickPair(
+  langPref?: string,
+): { a: SpeechSynthesisVoice | null; b: SpeechSynthesisVoice | null } {
+  const ranked = listVoices(langPref);
+  if (ranked.length === 0) return { a: null, b: null };
+
+  const female = ranked.find((rv) => inferGender(rv.voice) === "f");
+  const male = ranked.find((rv) => inferGender(rv.voice) === "m");
+
+  if (female && male) {
+    return { a: female.voice, b: male.voice };
+  }
+  // Fallback: top two distinct voices
+  const a = ranked[0]?.voice ?? null;
+  const b = ranked.find((rv) => rv.voice.voiceURI !== a?.voiceURI)?.voice ?? null;
+  return { a, b };
+}
+
 // Voice list arrives async on Chrome — call this with a callback when ready.
 export function onVoicesReady(cb: () => void): () => void {
   if (typeof window === "undefined" || !window.speechSynthesis) return () => {};

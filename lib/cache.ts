@@ -51,6 +51,7 @@ export function commentaryKey(
   passageId: string,
   density: string,
   lang: string,
+  mode: string,
 ) {
-  return `${bibleId}::${passageId}::${density}::${lang}`;
+  return `${bibleId}::${passageId}::${density}::${lang}::${mode}`;
 }

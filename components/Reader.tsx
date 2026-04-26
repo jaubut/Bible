@@ -4,9 +4,22 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Pause, Play, SkipForward, Square } from "lucide-react";
 import type { Book } from "@/lib/bible-api";
-import { parseScript, type Segment } from "@/lib/script";
-import { STORAGE_KEYS, type CompanionLang, isCompanionLang } from "@/lib/settings";
-import { listVoices, onVoicesReady, pickBest, isIOS, isAppleDesktop } from "@/lib/voices";
+import { parseScript, parsePodcast, type Segment } from "@/lib/script";
+import {
+  STORAGE_KEYS,
+  type CompanionLang,
+  type Mode,
+  isCompanionLang,
+  isMode,
+} from "@/lib/settings";
+import {
+  listVoices,
+  onVoicesReady,
+  pickBest,
+  pickPair,
+  isIOS,
+  isAppleDesktop,
+} from "@/lib/voices";
 import Settings from "@/components/Settings";
 
 type Props = {
@@ -25,8 +38,11 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
   const [playing, setPlaying] = useState(false);
   const [density, setDensity] = useState<"light" | "normal" | "rich">("normal");
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const [voiceA, setVoiceA] = useState<SpeechSynthesisVoice | null>(null);
+  const [voiceB, setVoiceB] = useState<SpeechSynthesisVoice | null>(null);
   const [rate, setRate] = useState(0.95);
   const [companionLang, setCompanionLang] = useState<CompanionLang>("en");
+  const [mode, setMode] = useState<Mode>("reading");
   const [showVoiceTip, setShowVoiceTip] = useState(false);
 
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -44,12 +60,14 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
       const lang = isCompanionLang(cl) ? cl : "en";
       setCompanionLang(lang);
 
-      let uri = localStorage.getItem(STORAGE_KEYS.voiceURI);
-      const all = listVoices(lang);
+      const m = localStorage.getItem(STORAGE_KEYS.mode);
+      setMode(isMode(m) ? m : "reading");
 
-      // If no explicit voice yet, auto-pick the best voice for this language
-      // and persist it (without flagging as user-picked, so it auto-updates
-      // when companion language changes).
+      const all = listVoices(lang);
+      const allRaw = window.speechSynthesis?.getVoices?.() ?? [];
+
+      // Reading-mode single voice
+      let uri = localStorage.getItem(STORAGE_KEYS.voiceURI);
       if (!uri) {
         const best = pickBest(lang);
         if (best) {
@@ -57,9 +75,25 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
           localStorage.setItem(STORAGE_KEYS.voiceURI, uri);
         }
       }
-
       const v = uri ? all.find((rv) => rv.voice.voiceURI === uri)?.voice : null;
       setSelectedVoice(v ?? null);
+
+      // Podcast-mode dual voices
+      let aURI = localStorage.getItem(STORAGE_KEYS.voiceURI_A);
+      let bURI = localStorage.getItem(STORAGE_KEYS.voiceURI_B);
+      if (!aURI || !bURI) {
+        const pair = pickPair(lang);
+        if (!aURI && pair.a) {
+          aURI = pair.a.voiceURI;
+          localStorage.setItem(STORAGE_KEYS.voiceURI_A, aURI);
+        }
+        if (!bURI && pair.b) {
+          bURI = pair.b.voiceURI;
+          localStorage.setItem(STORAGE_KEYS.voiceURI_B, bURI);
+        }
+      }
+      setVoiceA(aURI ? allRaw.find((vv) => vv.voiceURI === aURI) ?? null : null);
+      setVoiceB(bURI ? allRaw.find((vv) => vv.voiceURI === bURI) ?? null : null);
 
       const r = parseFloat(localStorage.getItem(STORAGE_KEYS.voiceRate) ?? "0.95");
       if (!Number.isNaN(r)) setRate(r);
@@ -69,8 +103,11 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
     const onStorage = (e: StorageEvent) => {
       if (
         e.key === STORAGE_KEYS.voiceURI ||
+        e.key === STORAGE_KEYS.voiceURI_A ||
+        e.key === STORAGE_KEYS.voiceURI_B ||
         e.key === STORAGE_KEYS.voiceRate ||
-        e.key === STORAGE_KEYS.companionLang
+        e.key === STORAGE_KEYS.companionLang ||
+        e.key === STORAGE_KEYS.mode
       )
         refresh();
     };
@@ -100,7 +137,13 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
         const res = await fetch("/api/companion", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ bibleId, passageId, density, lang: companionLang }),
+          body: JSON.stringify({
+            bibleId,
+            passageId,
+            density,
+            lang: companionLang,
+            mode,
+          }),
         });
         if (!res.ok || !res.body) {
           throw new Error(`Companion error: ${res.status}`);
@@ -108,15 +151,16 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let acc = "";
+        const parser = mode === "podcast" ? parsePodcast : parseScript;
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
           acc += decoder.decode(value, { stream: true });
           if (cancelled) return;
           setScript(acc);
-          setSegments(parseScript(acc));
+          setSegments(parser(acc));
         }
-        if (!cancelled) setSegments(parseScript(acc));
+        if (!cancelled) setSegments(parser(acc));
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -127,7 +171,7 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [bibleId, passageId, density, companionLang]);
+  }, [bibleId, passageId, density, companionLang, mode]);
 
   function stop() {
     if (typeof window === "undefined") return;
@@ -184,8 +228,15 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
     }
 
     const u = new SpeechSynthesisUtterance(seg.text);
-    if (selectedVoice) u.voice = selectedVoice;
-    u.rate = rate * (seg.kind === "aside" ? 1.05 : 1);
+    if (seg.kind === "host") {
+      const v = seg.speaker === "A" ? voiceA : voiceB;
+      if (v) u.voice = v;
+      else if (selectedVoice) u.voice = selectedVoice;
+      u.rate = rate;
+    } else {
+      if (selectedVoice) u.voice = selectedVoice;
+      u.rate = rate * (seg.kind === "aside" ? 1.05 : 1);
+    }
     u.pitch = 1.0;
     u.volume = 1;
     u.onend = () => {
@@ -241,7 +292,13 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
         </div>
       </header>
 
-      <div className="mt-5 grid grid-cols-2 sm:grid-cols-[1fr_auto_auto] gap-2 sm:gap-3">
+      <div
+        className={`mt-5 grid grid-cols-2 gap-2 sm:gap-3 ${
+          mode === "podcast"
+            ? "sm:grid-cols-[1fr_auto]"
+            : "sm:grid-cols-[1fr_auto_auto]"
+        }`}
+      >
         <select
           value={bookId}
           onChange={(e) => setPassageId(`${e.target.value}.1`)}
@@ -262,17 +319,34 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
           className="rounded-lg border border-[color:var(--color-divider)] bg-transparent px-3 py-3 min-h-[44px]"
           aria-label="Chapter"
         />
-        <select
-          value={density}
-          onChange={(e) => setDensity(e.target.value as "light" | "normal" | "rich")}
-          className="rounded-lg border border-[color:var(--color-divider)] bg-transparent px-3 py-3 min-h-[44px]"
-          aria-label="Commentary density"
-          title="How much commentary"
-        >
-          <option value="light">Light</option>
-          <option value="normal">Normal</option>
-          <option value="rich">Rich</option>
-        </select>
+        {mode === "reading" && (
+          <select
+            value={density}
+            onChange={(e) => setDensity(e.target.value as "light" | "normal" | "rich")}
+            className="rounded-lg border border-[color:var(--color-divider)] bg-transparent px-3 py-3 min-h-[44px]"
+            aria-label="Commentary density"
+            title="How much commentary"
+          >
+            <option value="light">Light</option>
+            <option value="normal">Normal</option>
+            <option value="rich">Rich</option>
+          </select>
+        )}
+      </div>
+
+      {/* Mode badge to make active mode visible at a glance */}
+      <div className="mt-2 text-xs text-[color:var(--color-aside)]">
+        {mode === "podcast" ? (
+          <>
+            Podcast mode — two hosts in conversation. Change in{" "}
+            <span aria-hidden>⚙</span> Settings.
+          </>
+        ) : (
+          <>
+            Reading mode — verses with cultural asides. Change in{" "}
+            <span aria-hidden>⚙</span> Settings.
+          </>
+        )}
       </div>
 
       <article className="prose-stone mt-8 max-w-none text-[17px] leading-[1.75]">
@@ -283,6 +357,50 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
         {segments.map((s, i) => {
           const active = i === activeIdx;
           if (s.kind === "pause") return <div key={i} className="h-3" />;
+          if (s.kind === "host") {
+            const isA = s.speaker === "A";
+            const voice = isA ? voiceA : voiceB;
+            const speakerLabel = voice
+              ? voice.name.split(/\s+|\(|—|–|-/)[0]
+              : isA
+              ? "Host A"
+              : "Host B";
+            return (
+              <div
+                key={i}
+                className={`my-4 flex gap-3 ${isA ? "" : "flex-row-reverse"}`}
+              >
+                <div
+                  className={`shrink-0 mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${
+                    isA
+                      ? "bg-[color:var(--color-ink)] text-[color:var(--color-bg)]"
+                      : "bg-[color:var(--color-accent)] text-[color:var(--color-bg)]"
+                  }`}
+                  aria-hidden
+                >
+                  {isA ? "A" : "B"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div
+                    className={`text-xs uppercase tracking-wide text-[color:var(--color-aside)] ${
+                      isA ? "" : "text-right"
+                    }`}
+                  >
+                    {speakerLabel}
+                  </div>
+                  <p
+                    className={`mt-1 px-4 py-3 rounded-2xl ${
+                      isA
+                        ? "bg-[color:var(--color-surface)] rounded-tl-sm"
+                        : "bg-[color:var(--color-ink)]/5 rounded-tr-sm"
+                    } ${active ? "ring-2 ring-[color:var(--color-ink)]/20" : ""}`}
+                  >
+                    {s.text}
+                  </p>
+                </div>
+              </div>
+            );
+          }
           if (s.kind === "aside")
             return (
               <p

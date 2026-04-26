@@ -6,12 +6,21 @@ import {
   THEMES,
   STORAGE_KEYS,
   COMPANION_LANGS,
+  MODES,
   type ThemeId,
   type CompanionLang,
+  type Mode,
   isThemeId,
   isCompanionLang,
+  isMode,
 } from "@/lib/settings";
-import { listVoices, onVoicesReady, pickBest, type RankedVoice } from "@/lib/voices";
+import {
+  listVoices,
+  onVoicesReady,
+  pickBest,
+  pickPair,
+  type RankedVoice,
+} from "@/lib/voices";
 
 const QUALITY_LABEL: Record<RankedVoice["quality"], string> = {
   premium: "Premium",
@@ -25,8 +34,11 @@ export default function Settings() {
   const [theme, setTheme] = useState<ThemeId>("parchment");
   const [voices, setVoices] = useState<RankedVoice[]>([]);
   const [voiceURI, setVoiceURI] = useState<string>("");
+  const [voiceURI_A, setVoiceURI_A] = useState<string>("");
+  const [voiceURI_B, setVoiceURI_B] = useState<string>("");
   const [rate, setRate] = useState(0.95);
   const [companionLang, setCompanionLang] = useState<CompanionLang>("en");
+  const [mode, setMode] = useState<Mode>("reading");
 
   // Hydrate from localStorage
   useEffect(() => {
@@ -35,12 +47,19 @@ export default function Settings() {
 
     const vu = localStorage.getItem(STORAGE_KEYS.voiceURI);
     if (vu) setVoiceURI(vu);
+    const va = localStorage.getItem(STORAGE_KEYS.voiceURI_A);
+    if (va) setVoiceURI_A(va);
+    const vb = localStorage.getItem(STORAGE_KEYS.voiceURI_B);
+    if (vb) setVoiceURI_B(vb);
 
     const r = parseFloat(localStorage.getItem(STORAGE_KEYS.voiceRate) ?? "0.95");
     if (!Number.isNaN(r)) setRate(r);
 
     const cl = localStorage.getItem(STORAGE_KEYS.companionLang);
     if (isCompanionLang(cl)) setCompanionLang(cl);
+
+    const m = localStorage.getItem(STORAGE_KEYS.mode);
+    if (isMode(m)) setMode(m);
   }, []);
 
   // Load voices (async on Chrome). Re-rank when companion language changes
@@ -48,22 +67,48 @@ export default function Settings() {
   useEffect(() => {
     const update = () => {
       setVoices(listVoices(companionLang));
-      // Auto-pick best voice if user has never explicitly chosen one,
-      // OR if the current voice doesn't match the new language.
+      const all = window.speechSynthesis?.getVoices?.() ?? [];
+
+      // Reading-mode single voice
       const userPicked = localStorage.getItem(STORAGE_KEYS.voiceUserPicked) === "1";
       const current = localStorage.getItem(STORAGE_KEYS.voiceURI);
       const langMatches = current
-        ? window.speechSynthesis
-            .getVoices()
-            .find((v) => v.voiceURI === current)
-            ?.lang.toLowerCase()
-            .startsWith(companionLang.toLowerCase())
+        ? all.find((v) => v.voiceURI === current)?.lang.toLowerCase().startsWith(
+            companionLang.toLowerCase(),
+          )
         : false;
       if (!userPicked || !langMatches) {
         const best = pickBest(companionLang);
         if (best) {
           localStorage.setItem(STORAGE_KEYS.voiceURI, best.voiceURI);
           setVoiceURI(best.voiceURI);
+        }
+      }
+
+      // Podcast-mode two voices: female + male in current language
+      const aPicked = localStorage.getItem(STORAGE_KEYS.voiceUserPicked_A) === "1";
+      const bPicked = localStorage.getItem(STORAGE_KEYS.voiceUserPicked_B) === "1";
+      const aURI = localStorage.getItem(STORAGE_KEYS.voiceURI_A);
+      const bURI = localStorage.getItem(STORAGE_KEYS.voiceURI_B);
+      const aLangOk = aURI
+        ? all.find((v) => v.voiceURI === aURI)?.lang.toLowerCase().startsWith(
+            companionLang.toLowerCase(),
+          )
+        : false;
+      const bLangOk = bURI
+        ? all.find((v) => v.voiceURI === bURI)?.lang.toLowerCase().startsWith(
+            companionLang.toLowerCase(),
+          )
+        : false;
+      if (!aPicked || !aLangOk || !bPicked || !bLangOk) {
+        const pair = pickPair(companionLang);
+        if (pair.a && (!aPicked || !aLangOk)) {
+          localStorage.setItem(STORAGE_KEYS.voiceURI_A, pair.a.voiceURI);
+          setVoiceURI_A(pair.a.voiceURI);
+        }
+        if (pair.b && (!bPicked || !bLangOk)) {
+          localStorage.setItem(STORAGE_KEYS.voiceURI_B, pair.b.voiceURI);
+          setVoiceURI_B(pair.b.voiceURI);
         }
       }
     };
@@ -84,6 +129,18 @@ export default function Settings() {
     localStorage.setItem(STORAGE_KEYS.voiceUserPicked, "1");
   }
 
+  function applyVoiceA(uri: string) {
+    setVoiceURI_A(uri);
+    localStorage.setItem(STORAGE_KEYS.voiceURI_A, uri);
+    localStorage.setItem(STORAGE_KEYS.voiceUserPicked_A, "1");
+  }
+
+  function applyVoiceB(uri: string) {
+    setVoiceURI_B(uri);
+    localStorage.setItem(STORAGE_KEYS.voiceURI_B, uri);
+    localStorage.setItem(STORAGE_KEYS.voiceUserPicked_B, "1");
+  }
+
   function applyRate(r: number) {
     setRate(r);
     localStorage.setItem(STORAGE_KEYS.voiceRate, String(r));
@@ -94,17 +151,27 @@ export default function Settings() {
     localStorage.setItem(STORAGE_KEYS.companionLang, l);
   }
 
-  function preview() {
+  function applyMode(m: Mode) {
+    setMode(m);
+    localStorage.setItem(STORAGE_KEYS.mode, m);
+  }
+
+  function previewWith(uri: string) {
     if (typeof window === "undefined" || !voices.length) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(
-      "In the beginning, God created the heavens and the earth.",
+      companionLang === "fr"
+        ? "Au commencement, Dieu créa les cieux et la terre."
+        : "In the beginning, God created the heavens and the earth.",
     );
-    const v = voices.find((rv) => rv.voice.voiceURI === voiceURI)?.voice;
+    const v = voices.find((rv) => rv.voice.voiceURI === uri)?.voice;
     if (v) u.voice = v;
     u.rate = rate;
-    u.pitch = 1;
     window.speechSynthesis.speak(u);
+  }
+
+  function preview() {
+    previewWith(voiceURI);
   }
 
   // Group voices by language for the picker
@@ -201,6 +268,32 @@ export default function Settings() {
                 </div>
               </section>
 
+              {/* Mode */}
+              <section>
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
+                  Mode
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {MODES.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => applyMode(m.id)}
+                      className={`rounded-xl border px-3 py-2.5 min-h-[64px] text-left transition ${
+                        mode === m.id
+                          ? "border-[color:var(--color-ink)] bg-[color:var(--color-ink)]/5"
+                          : "border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5"
+                      }`}
+                      aria-pressed={mode === m.id}
+                    >
+                      <div className="text-sm font-medium">{m.name}</div>
+                      <div className="text-xs text-[color:var(--color-aside)] mt-0.5">
+                        {m.description}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
               {/* Companion Language */}
               <section>
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
@@ -227,48 +320,53 @@ export default function Settings() {
                 </p>
               </section>
 
-              {/* Voice */}
+              {/* Voice(s) */}
               <section>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--color-aside)]">
-                    Voice
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={preview}
-                    disabled={!voices.length}
-                    className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[color:var(--color-divider)] px-3 text-sm hover:bg-[color:var(--color-ink)]/5 disabled:opacity-40"
-                    aria-label="Preview voice"
-                  >
-                    <Volume2 size={16} /> Preview
-                  </button>
-                </div>
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
+                  {mode === "podcast" ? "Podcast voices" : "Voice"}
+                </h3>
 
                 {voices.length === 0 ? (
                   <p className="text-sm text-[color:var(--color-aside)]">
                     Loading voices…
                   </p>
                 ) : (
-                  <div className="space-y-3">
-                    <select
-                      value={voiceURI}
-                      onChange={(e) => applyVoice(e.target.value)}
-                      className="w-full rounded-lg border border-[color:var(--color-divider)] bg-transparent px-3 py-3 min-h-[44px]"
-                    >
-                      <option value="">System default</option>
-                      {grouped.map(([lang, list]) => (
-                        <optgroup key={lang} label={lang}>
-                          {list.map((rv) => (
-                            <option key={rv.voice.voiceURI} value={rv.voice.voiceURI}>
-                              {rv.voice.name} — {QUALITY_LABEL[rv.quality]}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ))}
-                    </select>
+                  <div className="space-y-4">
+                    {mode === "reading" && (
+                      <VoiceRow
+                        label="Narrator"
+                        value={voiceURI}
+                        onChange={applyVoice}
+                        onPreview={preview}
+                        grouped={grouped}
+                      />
+                    )}
+
+                    {mode === "podcast" && (
+                      <>
+                        <VoiceRow
+                          label="Host A"
+                          hint="Curious learner"
+                          value={voiceURI_A}
+                          onChange={applyVoiceA}
+                          onPreview={() => previewWith(voiceURI_A)}
+                          grouped={grouped}
+                        />
+                        <VoiceRow
+                          label="Host B"
+                          hint="Scholarly companion"
+                          value={voiceURI_B}
+                          onChange={applyVoiceB}
+                          onPreview={() => previewWith(voiceURI_B)}
+                          grouped={grouped}
+                        />
+                      </>
+                    )}
 
                     <p className="text-xs text-[color:var(--color-aside)] leading-relaxed">
-                      Tip: on iOS, install higher-quality voices in <em>Settings → Accessibility → Spoken Content → Voices</em>. On macOS, install Premium/Enhanced voices in <em>System Settings → Accessibility → Spoken Content → System Voice → Manage Voices</em>.
+                      Tip: install free Premium voices in{" "}
+                      <em>iOS Settings → Accessibility → Spoken Content → Voices</em>{" "}
+                      or <em>macOS System Settings → Accessibility → Spoken Content → Manage Voices</em>. Apple&apos;s Premium voices sound studio-grade.
                     </p>
 
                     <label className="block">
@@ -296,6 +394,59 @@ export default function Settings() {
         </div>
       )}
     </>
+  );
+}
+
+function VoiceRow({
+  label,
+  hint,
+  value,
+  onChange,
+  onPreview,
+  grouped,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (uri: string) => void;
+  onPreview: () => void;
+  grouped: [string, RankedVoice[]][];
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1.5">
+        <div>
+          <span className="text-sm font-medium">{label}</span>
+          {hint && (
+            <span className="ml-2 text-xs text-[color:var(--color-aside)]">{hint}</span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onPreview}
+          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[color:var(--color-divider)] px-3 text-xs hover:bg-[color:var(--color-ink)]/5"
+          aria-label={`Preview ${label}`}
+        >
+          <Volume2 size={14} /> Preview
+        </button>
+      </div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border border-[color:var(--color-divider)] bg-transparent px-3 py-3 min-h-[44px]"
+      >
+        <option value="">System default</option>
+        {grouped.map(([lang, list]) => (
+          <optgroup key={lang} label={lang}>
+            {list.map((rv) => (
+              <option key={rv.voice.voiceURI} value={rv.voice.voiceURI}>
+                {rv.voice.name} — {QUALITY_LABEL[rv.quality]}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </div>
   );
 }
 

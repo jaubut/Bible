@@ -2,6 +2,7 @@ import { z } from "zod";
 import { anthropic, COMPANION_MODEL } from "@/lib/anthropic";
 import { bibleApi } from "@/lib/bible-api";
 import { COMPANION_SYSTEM, buildCompanionUserPrompt } from "@/lib/companion-prompt";
+import { PODCAST_SYSTEM, buildPodcastUserPrompt } from "@/lib/podcast-prompt";
 import { commentaryKey, getCommentary, putCommentary } from "@/lib/cache";
 
 export const runtime = "nodejs";
@@ -11,6 +12,7 @@ const Body = z.object({
   passageId: z.string().min(1),
   density: z.enum(["light", "normal", "rich"]).default("normal"),
   lang: z.enum(["en", "fr"]).default("en"),
+  mode: z.enum(["reading", "podcast"]).default("reading"),
 });
 
 export async function POST(req: Request) {
@@ -21,9 +23,9 @@ export async function POST(req: Request) {
       headers: { "content-type": "application/json" },
     });
   }
-  const { bibleId, passageId, density, lang } = body.data;
+  const { bibleId, passageId, density, lang, mode } = body.data;
 
-  const cacheKey = commentaryKey(bibleId, passageId, density, lang);
+  const cacheKey = commentaryKey(bibleId, passageId, density, lang, mode);
   const cached = getCommentary(cacheKey);
   if (cached) {
     return new Response(cached, {
@@ -33,28 +35,34 @@ export async function POST(req: Request) {
 
   const passage = await bibleApi.getPassage(bibleId, passageId);
 
+  const isPodcast = mode === "podcast";
+  const systemText = isPodcast ? PODCAST_SYSTEM : COMPANION_SYSTEM;
+  const userPrompt = isPodcast
+    ? buildPodcastUserPrompt({
+        reference: passage.reference,
+        translation: bibleId,
+        passageText: passage.content,
+        lang,
+      })
+    : buildCompanionUserPrompt({
+        reference: passage.reference,
+        translation: bibleId,
+        passageText: passage.content,
+        density,
+        lang,
+      });
+
   const stream = await anthropic().messages.stream({
     model: COMPANION_MODEL,
-    max_tokens: 4096,
+    max_tokens: isPodcast ? 8192 : 4096,
     system: [
       {
         type: "text",
-        text: COMPANION_SYSTEM,
+        text: systemText,
         cache_control: { type: "ephemeral" },
       },
     ],
-    messages: [
-      {
-        role: "user",
-        content: buildCompanionUserPrompt({
-          reference: passage.reference,
-          translation: bibleId,
-          passageText: passage.content,
-          density,
-          lang,
-        }),
-      },
-    ],
+    messages: [{ role: "user", content: userPrompt }],
   });
 
   let full = "";
