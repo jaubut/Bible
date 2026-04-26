@@ -58,6 +58,8 @@ export const STORAGE_KEYS = {
   voiceURI_B: "bible-voice-uri-b",
   voiceUserPicked_A: "bible-voice-user-picked-a",
   voiceUserPicked_B: "bible-voice-user-picked-b",
+  edgeVoiceA: "bible-edge-voice-a",
+  edgeVoiceB: "bible-edge-voice-b",
   companionLang: "bible-companion-lang",
   mode: "bible-mode",
   iosTipDismissed: "bible-ios-tip-dismissed",

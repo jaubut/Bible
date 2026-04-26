@@ -21,6 +21,7 @@ import {
   pickPair,
   type RankedVoice,
 } from "@/lib/voices";
+import { voicesForLang, defaultPair, type EdgeVoice } from "@/lib/google-voices";
 
 const QUALITY_LABEL: Record<RankedVoice["quality"], string> = {
   premium: "Premium",
@@ -39,6 +40,8 @@ export default function Settings() {
   const [rate, setRate] = useState(0.95);
   const [companionLang, setCompanionLang] = useState<CompanionLang>("en");
   const [mode, setMode] = useState<Mode>("reading");
+  const [edgeVoiceA, setEdgeVoiceA] = useState<string>("");
+  const [edgeVoiceB, setEdgeVoiceB] = useState<string>("");
 
   // Hydrate from localStorage
   useEffect(() => {
@@ -60,7 +63,42 @@ export default function Settings() {
 
     const m = localStorage.getItem(STORAGE_KEYS.mode);
     if (isMode(m)) setMode(m);
+
+    const ea = localStorage.getItem(STORAGE_KEYS.edgeVoiceA);
+    const eb = localStorage.getItem(STORAGE_KEYS.edgeVoiceB);
+    if (ea) setEdgeVoiceA(ea);
+    if (eb) setEdgeVoiceB(eb);
   }, []);
+
+  // When companion language changes, reset Edge voices to language defaults
+  // unless user has already picked voices for that language.
+  useEffect(() => {
+    const list = voicesForLang(companionLang);
+    const ids = new Set(list.map((v) => v.id));
+    const def = defaultPair(companionLang);
+
+    let aChanged = false;
+    let bChanged = false;
+    let nextA = edgeVoiceA;
+    let nextB = edgeVoiceB;
+    if (!nextA || !ids.has(nextA)) {
+      nextA = def.a;
+      aChanged = true;
+    }
+    if (!nextB || !ids.has(nextB)) {
+      nextB = def.b;
+      bChanged = true;
+    }
+    if (aChanged) {
+      setEdgeVoiceA(nextA);
+      localStorage.setItem(STORAGE_KEYS.edgeVoiceA, nextA);
+    }
+    if (bChanged) {
+      setEdgeVoiceB(nextB);
+      localStorage.setItem(STORAGE_KEYS.edgeVoiceB, nextB);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companionLang]);
 
   // Load voices (async on Chrome). Re-rank when companion language changes
   // so the picker always surfaces the best voice for the chosen language.
@@ -154,6 +192,38 @@ export default function Settings() {
   function applyMode(m: Mode) {
     setMode(m);
     localStorage.setItem(STORAGE_KEYS.mode, m);
+  }
+
+  function applyEdgeVoiceA(id: string) {
+    setEdgeVoiceA(id);
+    localStorage.setItem(STORAGE_KEYS.edgeVoiceA, id);
+  }
+
+  function applyEdgeVoiceB(id: string) {
+    setEdgeVoiceB(id);
+    localStorage.setItem(STORAGE_KEYS.edgeVoiceB, id);
+  }
+
+  // Brief in-app preview of an Edge voice via the audio API.
+  // Plays the same line we use for browser-voice preview.
+  const [edgePreviewing, setEdgePreviewing] = useState<string | null>(null);
+  async function previewEdge(voiceId: string) {
+    setEdgePreviewing(voiceId);
+    try {
+      const res = await fetch("/api/voice-preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ voice: voiceId, lang: companionLang }),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => URL.revokeObjectURL(url);
+      await audio.play();
+    } finally {
+      setEdgePreviewing(null);
+    }
   }
 
   function previewWith(uri: string) {
@@ -344,48 +414,60 @@ export default function Settings() {
 
                     {mode === "podcast" && (
                       <>
-                        <VoiceRow
+                        <EdgeVoiceRow
                           label="Host A"
                           hint="Curious learner"
-                          value={voiceURI_A}
-                          onChange={applyVoiceA}
-                          onPreview={() => previewWith(voiceURI_A)}
-                          grouped={grouped}
+                          value={edgeVoiceA}
+                          options={voicesForLang(companionLang)}
+                          onChange={applyEdgeVoiceA}
+                          onPreview={() => previewEdge(edgeVoiceA)}
+                          previewing={edgePreviewing === edgeVoiceA}
                         />
-                        <VoiceRow
+                        <EdgeVoiceRow
                           label="Host B"
                           hint="Scholarly companion"
-                          value={voiceURI_B}
-                          onChange={applyVoiceB}
-                          onPreview={() => previewWith(voiceURI_B)}
-                          grouped={grouped}
+                          value={edgeVoiceB}
+                          options={voicesForLang(companionLang)}
+                          onChange={applyEdgeVoiceB}
+                          onPreview={() => previewEdge(edgeVoiceB)}
+                          previewing={edgePreviewing === edgeVoiceB}
                         />
+                        <p className="text-xs text-[color:var(--color-aside)] leading-relaxed">
+                          Podcast mode uses cloud-rendered neural voices —
+                          studio-quality, identical across devices, with proper
+                          pacing and intonation. First listen of each chapter
+                          generates audio (~30–60s); replays are instant from cache.
+                        </p>
                       </>
                     )}
 
-                    <p className="text-xs text-[color:var(--color-aside)] leading-relaxed">
-                      Tip: install free Premium voices in{" "}
-                      <em>iOS Settings → Accessibility → Spoken Content → Voices</em>{" "}
-                      or <em>macOS System Settings → Accessibility → Spoken Content → Manage Voices</em>. Apple&apos;s Premium voices sound studio-grade.
-                    </p>
+                    {mode === "reading" && (
+                      <>
+                        <p className="text-xs text-[color:var(--color-aside)] leading-relaxed">
+                          Tip: install free Premium voices in{" "}
+                          <em>iOS Settings → Accessibility → Spoken Content → Voices</em>{" "}
+                          or <em>macOS System Settings → Accessibility → Spoken Content → Manage Voices</em>. Apple&apos;s Premium voices sound studio-grade.
+                        </p>
 
-                    <label className="block">
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-sm">Speed</span>
-                        <span className="text-xs text-[color:var(--color-aside)]">
-                          {rate.toFixed(2)}×
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={0.6}
-                        max={1.4}
-                        step={0.05}
-                        value={rate}
-                        onChange={(e) => applyRate(parseFloat(e.target.value))}
-                        className="w-full"
-                      />
-                    </label>
+                        <label className="block">
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-sm">Speed</span>
+                            <span className="text-xs text-[color:var(--color-aside)]">
+                              {rate.toFixed(2)}×
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0.6}
+                            max={1.4}
+                            step={0.05}
+                            value={rate}
+                            onChange={(e) => applyRate(parseFloat(e.target.value))}
+                            className="w-full"
+                          />
+                        </label>
+                      </>
+                    )}
                   </div>
                 )}
               </section>
@@ -441,6 +523,68 @@ function VoiceRow({
             {list.map((rv) => (
               <option key={rv.voice.voiceURI} value={rv.voice.voiceURI}>
                 {rv.voice.name} — {QUALITY_LABEL[rv.quality]}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function EdgeVoiceRow({
+  label,
+  hint,
+  value,
+  options,
+  onChange,
+  onPreview,
+  previewing,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  options: EdgeVoice[];
+  onChange: (id: string) => void;
+  onPreview: () => void;
+  previewing: boolean;
+}) {
+  // Group voices by region for the picker
+  const groups = new Map<string, EdgeVoice[]>();
+  for (const v of options) {
+    const arr = groups.get(v.region) ?? [];
+    arr.push(v);
+    groups.set(v.region, arr);
+  }
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1.5">
+        <div>
+          <span className="text-sm font-medium">{label}</span>
+          {hint && (
+            <span className="ml-2 text-xs text-[color:var(--color-aside)]">{hint}</span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onPreview}
+          disabled={previewing || !value}
+          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[color:var(--color-divider)] px-3 text-xs hover:bg-[color:var(--color-ink)]/5 disabled:opacity-50"
+          aria-label={`Preview ${label}`}
+        >
+          <Volume2 size={14} /> {previewing ? "…" : "Preview"}
+        </button>
+      </div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border border-[color:var(--color-divider)] bg-transparent px-3 py-3 min-h-[44px]"
+      >
+        {Array.from(groups.entries()).map(([region, list]) => (
+          <optgroup key={region} label={region}>
+            {list.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name} ({v.gender === "f" ? "F" : "M"}) — {v.vibe}
               </option>
             ))}
           </optgroup>

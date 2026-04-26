@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Pause, Play, SkipForward, Square } from "lucide-react";
+import { Pause, Play, SkipForward, Square, Loader2 } from "lucide-react";
 import type { Book } from "@/lib/bible-api";
 import { parseScript, parsePodcast, type Segment } from "@/lib/script";
+import { defaultPair } from "@/lib/google-voices";
 import {
   STORAGE_KEYS,
   type CompanionLang,
@@ -44,6 +45,13 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
   const [companionLang, setCompanionLang] = useState<CompanionLang>("en");
   const [mode, setMode] = useState<Mode>("reading");
   const [showVoiceTip, setShowVoiceTip] = useState(false);
+  const [edgeVoiceA, setEdgeVoiceA] = useState<string>("");
+  const [edgeVoiceB, setEdgeVoiceB] = useState<string>("");
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioCurrent, setAudioCurrent] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
   const queueRef = useRef<number>(0);
@@ -97,6 +105,13 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
 
       const r = parseFloat(localStorage.getItem(STORAGE_KEYS.voiceRate) ?? "0.95");
       if (!Number.isNaN(r)) setRate(r);
+
+      // Edge voices for podcast mode
+      const def = defaultPair(lang);
+      const ea = localStorage.getItem(STORAGE_KEYS.edgeVoiceA) || def.a;
+      const eb = localStorage.getItem(STORAGE_KEYS.edgeVoiceB) || def.b;
+      setEdgeVoiceA(ea);
+      setEdgeVoiceB(eb);
     }
     refresh();
     const off = onVoicesReady(refresh);
@@ -107,7 +122,9 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
         e.key === STORAGE_KEYS.voiceURI_B ||
         e.key === STORAGE_KEYS.voiceRate ||
         e.key === STORAGE_KEYS.companionLang ||
-        e.key === STORAGE_KEYS.mode
+        e.key === STORAGE_KEYS.mode ||
+        e.key === STORAGE_KEYS.edgeVoiceA ||
+        e.key === STORAGE_KEYS.edgeVoiceB
       )
         refresh();
     };
@@ -173,15 +190,95 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
     };
   }, [bibleId, passageId, density, companionLang, mode]);
 
+  // Reset cached MP3 URL whenever the audio identity changes
+  useEffect(() => {
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+      } catch {
+        /* noop */
+      }
+    }
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl(null);
+    setAudioCurrent(0);
+    setAudioDuration(0);
+    setPlaying(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bibleId, passageId, companionLang, mode, edgeVoiceA, edgeVoiceB]);
+
   function stop() {
     if (typeof window === "undefined") return;
+    if (mode === "podcast") {
+      const a = audioRef.current;
+      if (a) {
+        try {
+          a.pause();
+          a.currentTime = 0;
+        } catch {
+          /* noop */
+        }
+      }
+      setPlaying(false);
+      return;
+    }
     window.speechSynthesis?.cancel();
     setPlaying(false);
     setActiveIdx(null);
   }
 
-  function play(fromIdx = 0) {
-    if (typeof window === "undefined" || !segments.length) return;
+  async function ensurePodcastAudio(): Promise<string | null> {
+    if (audioUrl) return audioUrl;
+    setAudioLoading(true);
+    try {
+      const res = await fetch("/api/audio", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          bibleId,
+          passageId,
+          lang: companionLang,
+          mode: "podcast",
+          voiceA: edgeVoiceA,
+          voiceB: edgeVoiceB,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Audio API ${res.status}: ${body.slice(0, 200)}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setAudioUrl(url);
+      return url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return null;
+    } finally {
+      setAudioLoading(false);
+    }
+  }
+
+  async function play(fromIdx = 0) {
+    if (typeof window === "undefined") return;
+
+    if (mode === "podcast") {
+      const url = await ensurePodcastAudio();
+      if (!url) return;
+      const a = audioRef.current;
+      if (!a) return;
+      if (a.src !== url) a.src = url;
+      try {
+        await a.play();
+        setPlaying(true);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+      return;
+    }
+
+    // Reading mode: browser TTS, segment-by-segment
+    if (!segments.length) return;
 
     // First-play tip: if user is on iOS or macOS and has not dismissed it,
     // and is using a Standard-grade voice, suggest installing a Premium voice.
@@ -257,6 +354,20 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
 
   function pause() {
     if (typeof window === "undefined") return;
+    if (mode === "podcast") {
+      const a = audioRef.current;
+      if (!a) return;
+      if (a.paused) {
+        a.play().catch(() => {
+          /* noop */
+        });
+        setPlaying(true);
+      } else {
+        a.pause();
+        setPlaying(false);
+      }
+      return;
+    }
     if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
       window.speechSynthesis.pause();
       setPlaying(false);
@@ -267,9 +378,26 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
   }
 
   function next() {
+    if (mode === "podcast") {
+      const a = audioRef.current;
+      if (a) a.currentTime = Math.min(a.currentTime + 15, a.duration || a.currentTime);
+      return;
+    }
     queueRef.current = Math.min(queueRef.current + 1, segments.length);
     if (typeof window !== "undefined") window.speechSynthesis.cancel();
     if (playing) speakNext();
+  }
+
+  function back15() {
+    const a = audioRef.current;
+    if (a) a.currentTime = Math.max(0, a.currentTime - 15);
+  }
+
+  function fmtTime(s: number): string {
+    if (!isFinite(s) || s < 0) return "0:00";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
   }
 
   return (
@@ -451,36 +579,89 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
         </div>
       )}
 
+      {/* Hidden audio element for podcast mode */}
+      <audio
+        ref={audioRef}
+        preload="auto"
+        playsInline
+        onTimeUpdate={(e) => setAudioCurrent(e.currentTarget.currentTime)}
+        onLoadedMetadata={(e) => setAudioDuration(e.currentTarget.duration)}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
+      />
+
       {/* Sticky transport bar — bottom of screen */}
       <div
         className="fixed inset-x-0 bottom-0 z-30 border-t border-[color:var(--color-divider)] bg-[color:var(--color-surface)]/95 backdrop-blur"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="mx-auto max-w-3xl px-5 sm:px-6 py-3 flex items-center justify-center gap-3">
-          <button
-            onClick={stop}
-            disabled={!segments.length}
-            className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5 disabled:opacity-40 transition"
-            aria-label="Stop"
-          >
-            <Square size={18} />
-          </button>
-          <button
-            onClick={() => (playing ? pause() : play(activeIdx ?? 0))}
-            disabled={!segments.length}
-            className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--color-ink)] text-[color:var(--color-bg)] disabled:opacity-40 transition hover:opacity-90"
-            aria-label={playing ? "Pause" : "Play"}
-          >
-            {playing ? <Pause size={22} /> : <Play size={22} />}
-          </button>
-          <button
-            onClick={next}
-            disabled={!segments.length}
-            className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5 disabled:opacity-40 transition"
-            aria-label="Next segment"
-          >
-            <SkipForward size={18} />
-          </button>
+        <div className="mx-auto max-w-3xl px-5 sm:px-6 py-3 space-y-2">
+          {mode === "podcast" && (audioUrl || audioLoading) && (
+            <div className="flex items-center gap-3 text-xs text-[color:var(--color-aside)]">
+              <span className="tabular-nums w-10 text-right">{fmtTime(audioCurrent)}</span>
+              <input
+                type="range"
+                min={0}
+                max={audioDuration || 0}
+                step={0.1}
+                value={audioCurrent}
+                disabled={!audioDuration}
+                onChange={(e) => {
+                  const a = audioRef.current;
+                  if (a) a.currentTime = parseFloat(e.target.value);
+                }}
+                className="flex-1 accent-[color:var(--color-ink)]"
+                aria-label="Scrub"
+              />
+              <span className="tabular-nums w-10">{fmtTime(audioDuration)}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={mode === "podcast" ? back15 : stop}
+              disabled={mode === "podcast" ? !audioUrl : !segments.length}
+              className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5 disabled:opacity-40 transition"
+              aria-label={mode === "podcast" ? "Back 15 seconds" : "Stop"}
+            >
+              {mode === "podcast" ? (
+                <span className="text-xs font-medium tabular-nums">−15</span>
+              ) : (
+                <Square size={18} />
+              )}
+            </button>
+            <button
+              onClick={() => (playing ? pause() : play(activeIdx ?? 0))}
+              disabled={mode === "podcast" ? audioLoading : !segments.length}
+              className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--color-ink)] text-[color:var(--color-bg)] disabled:opacity-40 transition hover:opacity-90"
+              aria-label={playing ? "Pause" : "Play"}
+            >
+              {audioLoading ? (
+                <Loader2 size={22} className="animate-spin" />
+              ) : playing ? (
+                <Pause size={22} />
+              ) : (
+                <Play size={22} />
+              )}
+            </button>
+            <button
+              onClick={next}
+              disabled={mode === "podcast" ? !audioUrl : !segments.length}
+              className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5 disabled:opacity-40 transition"
+              aria-label={mode === "podcast" ? "Forward 15 seconds" : "Next segment"}
+            >
+              {mode === "podcast" ? (
+                <span className="text-xs font-medium tabular-nums">+15</span>
+              ) : (
+                <SkipForward size={18} />
+              )}
+            </button>
+          </div>
+          {mode === "podcast" && audioLoading && (
+            <p className="text-center text-xs text-[color:var(--color-aside)]">
+              Generating audio with neural voices… ~30–60s the first time, instant on replays.
+            </p>
+          )}
         </div>
       </div>
 
