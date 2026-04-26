@@ -29,9 +29,17 @@ const GOOD_APPLE = [
   "Susan",
   "Tom",
   "Alex",
+  "Aaron",
+  "Nicky",
+  "Évelyne",
+  "Evelyne",
+  "Thomas",
+  "Amélie",
+  "Amelie",
+  "Audrey",
 ];
 
-export function rankVoice(v: SpeechSynthesisVoice): RankedVoice {
+export function rankVoice(v: SpeechSynthesisVoice, langPref?: string): RankedVoice {
   const name = v.name.toLowerCase();
   const hasPremium = PREMIUM_HINTS.some((h) => name.includes(h));
   const isGoodApple = GOOD_APPLE.some((g) => v.name.startsWith(g));
@@ -60,25 +68,32 @@ export function rankVoice(v: SpeechSynthesisVoice): RankedVoice {
     score = 30;
   }
 
-  // Avoid the truly bad ones (espeak, eSpeak, Compact)
   if (name.includes("espeak") || name.includes("compact")) score -= 50;
-
-  // Prefer local voices over remote
   if (v.localService) score += 5;
-
-  // Prefer English by default if user is on en-* — surface near top
-  if (v.lang.startsWith("en")) score += 10;
-
-  // Voices that explicitly mention "premium" tags
   if (hasPremium) score += 5;
+
+  // Language preference: a strong bonus for matching the companion language,
+  // smaller bonus for matching English as a sensible fallback.
+  if (langPref) {
+    const lp = langPref.toLowerCase();
+    if (v.lang.toLowerCase().startsWith(lp)) score += 50;
+    else if (lp !== "en" && v.lang.toLowerCase().startsWith("en")) score += 5;
+  } else if (v.lang.startsWith("en")) {
+    score += 10;
+  }
 
   return { voice: v, quality, score };
 }
 
-export function listVoices(): RankedVoice[] {
+export function listVoices(langPref?: string): RankedVoice[] {
   if (typeof window === "undefined" || !window.speechSynthesis) return [];
   const voices = window.speechSynthesis.getVoices();
-  return voices.map(rankVoice).sort((a, b) => b.score - a.score);
+  return voices.map((v) => rankVoice(v, langPref)).sort((a, b) => b.score - a.score);
+}
+
+export function pickBest(langPref?: string): SpeechSynthesisVoice | null {
+  const ranked = listVoices(langPref);
+  return ranked[0]?.voice ?? null;
 }
 
 // Voice list arrives async on Chrome — call this with a callback when ready.
@@ -91,4 +106,18 @@ export function onVoicesReady(cb: () => void): () => void {
   const handler = () => cb();
   window.speechSynthesis.addEventListener("voiceschanged", handler);
   return () => window.speechSynthesis.removeEventListener("voiceschanged", handler);
+}
+
+export function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  // iPadOS reports as Mac; the touch-points check disambiguates
+  const ua = navigator.userAgent;
+  if (/iPad|iPhone|iPod/.test(ua)) return true;
+  return ua.includes("Mac") && "ontouchend" in document;
+}
+
+export function isAppleDesktop(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return ua.includes("Mac") && !("ontouchend" in document);
 }

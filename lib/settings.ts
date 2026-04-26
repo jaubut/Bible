@@ -1,5 +1,16 @@
 export type ThemeId = "parchment" | "codex" | "sanctuary";
 
+export type CompanionLang = "en" | "fr";
+
+export const COMPANION_LANGS: { id: CompanionLang; name: string }[] = [
+  { id: "en", name: "English" },
+  { id: "fr", name: "Français" },
+];
+
+export function isCompanionLang(v: unknown): v is CompanionLang {
+  return v === "en" || v === "fr";
+}
+
 export const THEMES: { id: ThemeId; name: string; description: string }[] = [
   {
     id: "parchment",
@@ -21,8 +32,11 @@ export const THEMES: { id: ThemeId; name: string; description: string }[] = [
 export const STORAGE_KEYS = {
   theme: "bible-theme",
   voiceURI: "bible-voice-uri",
+  voiceUserPicked: "bible-voice-user-picked",
   voiceRate: "bible-voice-rate",
   voicePitch: "bible-voice-pitch",
+  companionLang: "bible-companion-lang",
+  iosTipDismissed: "bible-ios-tip-dismissed",
 } as const;
 
 export function isThemeId(v: unknown): v is ThemeId {

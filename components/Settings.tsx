@@ -2,8 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Settings as SettingsIcon, X, Volume2, Check } from "lucide-react";
-import { THEMES, STORAGE_KEYS, type ThemeId, isThemeId } from "@/lib/settings";
-import { listVoices, onVoicesReady, type RankedVoice } from "@/lib/voices";
+import {
+  THEMES,
+  STORAGE_KEYS,
+  COMPANION_LANGS,
+  type ThemeId,
+  type CompanionLang,
+  isThemeId,
+  isCompanionLang,
+} from "@/lib/settings";
+import { listVoices, onVoicesReady, pickBest, type RankedVoice } from "@/lib/voices";
 
 const QUALITY_LABEL: Record<RankedVoice["quality"], string> = {
   premium: "Premium",
@@ -18,6 +26,7 @@ export default function Settings() {
   const [voices, setVoices] = useState<RankedVoice[]>([]);
   const [voiceURI, setVoiceURI] = useState<string>("");
   const [rate, setRate] = useState(0.95);
+  const [companionLang, setCompanionLang] = useState<CompanionLang>("en");
 
   // Hydrate from localStorage
   useEffect(() => {
@@ -29,15 +38,39 @@ export default function Settings() {
 
     const r = parseFloat(localStorage.getItem(STORAGE_KEYS.voiceRate) ?? "0.95");
     if (!Number.isNaN(r)) setRate(r);
+
+    const cl = localStorage.getItem(STORAGE_KEYS.companionLang);
+    if (isCompanionLang(cl)) setCompanionLang(cl);
   }, []);
 
-  // Load voices (async on Chrome)
+  // Load voices (async on Chrome). Re-rank when companion language changes
+  // so the picker always surfaces the best voice for the chosen language.
   useEffect(() => {
-    const update = () => setVoices(listVoices());
+    const update = () => {
+      setVoices(listVoices(companionLang));
+      // Auto-pick best voice if user has never explicitly chosen one,
+      // OR if the current voice doesn't match the new language.
+      const userPicked = localStorage.getItem(STORAGE_KEYS.voiceUserPicked) === "1";
+      const current = localStorage.getItem(STORAGE_KEYS.voiceURI);
+      const langMatches = current
+        ? window.speechSynthesis
+            .getVoices()
+            .find((v) => v.voiceURI === current)
+            ?.lang.toLowerCase()
+            .startsWith(companionLang.toLowerCase())
+        : false;
+      if (!userPicked || !langMatches) {
+        const best = pickBest(companionLang);
+        if (best) {
+          localStorage.setItem(STORAGE_KEYS.voiceURI, best.voiceURI);
+          setVoiceURI(best.voiceURI);
+        }
+      }
+    };
     update();
     const off = onVoicesReady(update);
     return off;
-  }, []);
+  }, [companionLang]);
 
   function applyTheme(id: ThemeId) {
     setTheme(id);
@@ -48,11 +81,17 @@ export default function Settings() {
   function applyVoice(uri: string) {
     setVoiceURI(uri);
     localStorage.setItem(STORAGE_KEYS.voiceURI, uri);
+    localStorage.setItem(STORAGE_KEYS.voiceUserPicked, "1");
   }
 
   function applyRate(r: number) {
     setRate(r);
     localStorage.setItem(STORAGE_KEYS.voiceRate, String(r));
+  }
+
+  function applyCompanionLang(l: CompanionLang) {
+    setCompanionLang(l);
+    localStorage.setItem(STORAGE_KEYS.companionLang, l);
   }
 
   function preview() {
@@ -160,6 +199,32 @@ export default function Settings() {
                     </button>
                   ))}
                 </div>
+              </section>
+
+              {/* Companion Language */}
+              <section>
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
+                  Companion language
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {COMPANION_LANGS.map((l) => (
+                    <button
+                      key={l.id}
+                      onClick={() => applyCompanionLang(l.id)}
+                      className={`rounded-xl border px-3 min-h-[48px] text-sm transition ${
+                        companionLang === l.id
+                          ? "border-[color:var(--color-ink)] bg-[color:var(--color-ink)]/5"
+                          : "border-[color:var(--color-divider)] hover:bg-[color:var(--color-ink)]/5"
+                      }`}
+                      aria-pressed={companionLang === l.id}
+                    >
+                      {l.name}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-[color:var(--color-aside)] leading-relaxed">
+                  Verses stay in the Bible&apos;s original language. The companion&apos;s asides — and a brief gloss after each verse in another language — appear in your chosen language.
+                </p>
               </section>
 
               {/* Voice */}

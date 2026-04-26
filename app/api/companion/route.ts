@@ -10,6 +10,7 @@ const Body = z.object({
   bibleId: z.string().min(1),
   passageId: z.string().min(1),
   density: z.enum(["light", "normal", "rich"]).default("normal"),
+  lang: z.enum(["en", "fr"]).default("en"),
 });
 
 export async function POST(req: Request) {
@@ -20,9 +21,9 @@ export async function POST(req: Request) {
       headers: { "content-type": "application/json" },
     });
   }
-  const { bibleId, passageId, density } = body.data;
+  const { bibleId, passageId, density, lang } = body.data;
 
-  const cacheKey = commentaryKey(bibleId, passageId, density);
+  const cacheKey = commentaryKey(bibleId, passageId, density, lang);
   const cached = getCommentary(cacheKey);
   if (cached) {
     return new Response(cached, {
@@ -50,6 +51,7 @@ export async function POST(req: Request) {
           translation: bibleId,
           passageText: passage.content,
           density,
+          lang,
         }),
       },
     ],

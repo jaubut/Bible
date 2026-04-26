@@ -5,8 +5,8 @@ import Link from "next/link";
 import { Pause, Play, SkipForward, Square } from "lucide-react";
 import type { Book } from "@/lib/bible-api";
 import { parseScript, type Segment } from "@/lib/script";
-import { STORAGE_KEYS } from "@/lib/settings";
-import { listVoices, onVoicesReady } from "@/lib/voices";
+import { STORAGE_KEYS, type CompanionLang, isCompanionLang } from "@/lib/settings";
+import { listVoices, onVoicesReady, pickBest, isIOS, isAppleDesktop } from "@/lib/voices";
 import Settings from "@/components/Settings";
 
 type Props = {
@@ -26,6 +26,8 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
   const [density, setDensity] = useState<"light" | "normal" | "rich">("normal");
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
   const [rate, setRate] = useState(0.95);
+  const [companionLang, setCompanionLang] = useState<CompanionLang>("en");
+  const [showVoiceTip, setShowVoiceTip] = useState(false);
 
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
   const queueRef = useRef<number>(0);
@@ -38,17 +40,39 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
   // Load voice + rate from settings; refresh whenever Settings updates them
   useEffect(() => {
     function refresh() {
-      const uri = localStorage.getItem(STORAGE_KEYS.voiceURI);
-      const all = listVoices();
+      const cl = localStorage.getItem(STORAGE_KEYS.companionLang);
+      const lang = isCompanionLang(cl) ? cl : "en";
+      setCompanionLang(lang);
+
+      let uri = localStorage.getItem(STORAGE_KEYS.voiceURI);
+      const all = listVoices(lang);
+
+      // If no explicit voice yet, auto-pick the best voice for this language
+      // and persist it (without flagging as user-picked, so it auto-updates
+      // when companion language changes).
+      if (!uri) {
+        const best = pickBest(lang);
+        if (best) {
+          uri = best.voiceURI;
+          localStorage.setItem(STORAGE_KEYS.voiceURI, uri);
+        }
+      }
+
       const v = uri ? all.find((rv) => rv.voice.voiceURI === uri)?.voice : null;
       setSelectedVoice(v ?? null);
+
       const r = parseFloat(localStorage.getItem(STORAGE_KEYS.voiceRate) ?? "0.95");
       if (!Number.isNaN(r)) setRate(r);
     }
     refresh();
     const off = onVoicesReady(refresh);
     const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEYS.voiceURI || e.key === STORAGE_KEYS.voiceRate) refresh();
+      if (
+        e.key === STORAGE_KEYS.voiceURI ||
+        e.key === STORAGE_KEYS.voiceRate ||
+        e.key === STORAGE_KEYS.companionLang
+      )
+        refresh();
     };
     window.addEventListener("storage", onStorage);
     // Also poll on focus — same-tab Settings changes don't fire storage events
@@ -76,7 +100,7 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
         const res = await fetch("/api/companion", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ bibleId, passageId, density }),
+          body: JSON.stringify({ bibleId, passageId, density, lang: companionLang }),
         });
         if (!res.ok || !res.body) {
           throw new Error(`Companion error: ${res.status}`);
@@ -103,7 +127,7 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [bibleId, passageId, density]);
+  }, [bibleId, passageId, density, companionLang]);
 
   function stop() {
     if (typeof window === "undefined") return;
@@ -114,10 +138,31 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
 
   function play(fromIdx = 0) {
     if (typeof window === "undefined" || !segments.length) return;
+
+    // First-play tip: if user is on iOS or macOS and has not dismissed it,
+    // and is using a Standard-grade voice, suggest installing a Premium voice.
+    const dismissed = localStorage.getItem(STORAGE_KEYS.iosTipDismissed) === "1";
+    if (!dismissed && (isIOS() || isAppleDesktop())) {
+      const v = selectedVoice;
+      const isHighQuality =
+        !!v &&
+        (v.name.toLowerCase().includes("premium") ||
+          v.name.toLowerCase().includes("enhanced") ||
+          v.name.toLowerCase().includes("siri"));
+      if (!isHighQuality) {
+        setShowVoiceTip(true);
+      }
+    }
+
     window.speechSynthesis.cancel();
     setPlaying(true);
     queueRef.current = fromIdx;
     speakNext();
+  }
+
+  function dismissVoiceTip() {
+    localStorage.setItem(STORAGE_KEYS.iosTipDismissed, "1");
+    setShowVoiceTip(false);
   }
 
   function speakNext() {
@@ -262,6 +307,31 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
           );
         })}
       </article>
+
+      {/* iOS / macOS Premium voice tip — shown once on first play */}
+      {showVoiceTip && (
+        <div
+          className="fixed inset-x-0 bottom-[5.5rem] z-40 px-4"
+          style={{ bottom: "calc(5.5rem + env(safe-area-inset-bottom))" }}
+        >
+          <div className="mx-auto max-w-md rounded-2xl border border-[color:var(--color-divider)] bg-[color:var(--color-surface)] shadow-lg p-4">
+            <p className="text-sm font-semibold">Better voice, free</p>
+            <p className="mt-1 text-xs leading-relaxed text-[color:var(--color-aside)]">
+              {isIOS()
+                ? "iOS → Settings → Accessibility → Spoken Content → Voices → English (or French) → tap any 'Premium' voice to download. Then come back and pick it from Settings."
+                : "System Settings → Accessibility → Spoken Content → System Voice → Manage Voices → install a Premium voice. Then pick it from Settings."}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={dismissVoiceTip}
+                className="rounded-full bg-[color:var(--color-ink)] text-[color:var(--color-bg)] px-4 min-h-[40px] text-sm hover:opacity-90"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sticky transport bar — bottom of screen */}
       <div

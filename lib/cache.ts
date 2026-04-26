@@ -46,6 +46,11 @@ export function putCommentary(args: {
     .run(args.key, args.bibleId, args.passageId, args.density, args.script, Date.now());
 }
 
-export function commentaryKey(bibleId: string, passageId: string, density: string) {
-  return `${bibleId}::${passageId}::${density}`;
+export function commentaryKey(
+  bibleId: string,
+  passageId: string,
+  density: string,
+  lang: string,
+) {
+  return `${bibleId}::${passageId}::${density}::${lang}`;
 }
