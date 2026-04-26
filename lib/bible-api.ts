@@ -53,17 +53,47 @@ export type Passage = {
   copyright?: string;
 };
 
+import {
+  isExtraBibleId,
+  listExtraBibles,
+  listExtraBooks,
+  listExtraChapters,
+  getExtraPassage,
+} from "./extra-books";
+
 export const bibleApi = {
-  listBibles: (lang?: string) =>
-    get<Bible[]>(lang ? `/bibles?language=${encodeURIComponent(lang)}` : "/bibles"),
-  listBooks: (bibleId: string) => get<Book[]>(`/bibles/${bibleId}/books`),
-  listChapters: (bibleId: string, bookId: string) =>
-    get<Chapter[]>(`/bibles/${bibleId}/books/${bookId}/chapters`),
-  getPassage: (bibleId: string, passageId: string) =>
-    get<Passage>(
+  listBibles: async (lang?: string): Promise<Bible[]> => {
+    const remote = await get<Bible[]>(
+      lang ? `/bibles?language=${encodeURIComponent(lang)}` : "/bibles",
+    );
+    // Append our public-domain Pseudepigrapha bibles when no language filter
+    // is set or when filtering for English.
+    if (!lang || lang === "eng") {
+      return [...remote, ...listExtraBibles()];
+    }
+    return remote;
+  },
+  listBooks: (bibleId: string): Promise<Book[]> => {
+    if (isExtraBibleId(bibleId)) return Promise.resolve(listExtraBooks(bibleId));
+    return get<Book[]>(`/bibles/${bibleId}/books`);
+  },
+  listChapters: (bibleId: string, bookId: string): Promise<Chapter[]> => {
+    if (isExtraBibleId(bibleId)) return Promise.resolve(listExtraChapters(bibleId));
+    return get<Chapter[]>(`/bibles/${bibleId}/books/${bookId}/chapters`);
+  },
+  getPassage: (bibleId: string, passageId: string): Promise<Passage> => {
+    if (isExtraBibleId(bibleId)) {
+      const p = getExtraPassage(bibleId, passageId);
+      if (!p) {
+        return Promise.reject(new Error(`Passage not found: ${passageId}`));
+      }
+      return Promise.resolve(p);
+    }
+    return get<Passage>(
       `/bibles/${bibleId}/passages/${encodeURIComponent(passageId)}` +
         `?content-type=text&include-notes=false&include-titles=false&include-verse-numbers=true`,
-    ),
+    );
+  },
 };
 
 const ETHIOPIAN_LANG_CODES = ["amh", "gez", "tir", "orm", "gaz"];

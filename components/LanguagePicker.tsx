@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Bible } from "@/lib/bible-api";
 
-type Mode = "ethiopian" | "english" | "french" | "all";
+type Mode = "ethiopian" | "pseudepigrapha" | "english" | "french" | "all";
 
 const MODE_LABEL: Record<Mode, string> = {
   ethiopian: "Ethiopian",
+  pseudepigrapha: "Pseudepigrapha",
   english: "English",
   french: "French",
   all: "All",
@@ -26,6 +27,7 @@ export default function LanguagePicker() {
       setError(null);
       const params = new URLSearchParams();
       if (mode === "ethiopian") params.set("ethiopian", "1");
+      else if (mode === "pseudepigrapha") params.set("pseudepigrapha", "1");
       else if (mode === "english") params.set("lang", "eng");
       else if (mode === "french") params.set("lang", "fra");
       try {
@@ -49,7 +51,7 @@ export default function LanguagePicker() {
   return (
     <div>
       <div className="flex gap-2 flex-wrap" role="tablist" aria-label="Language filter">
-        {(["ethiopian", "english", "french", "all"] as const).map((m) => (
+        {(["ethiopian", "pseudepigrapha", "english", "french", "all"] as const).map((m) => (
           <button
             key={m}
             role="tab"
@@ -83,9 +85,19 @@ export default function LanguagePicker() {
                 <Link href="https://scripture.api.bible/admin" className="underline">
                   api.bible dashboard
                 </Link>
-                {" "}→ <em>Plan</em> tab → request access to the language. Each Ethiopian
-                publisher (Bible Society of Ethiopia, etc.) approves access individually.
-                The full Tewahedo canon (Enoch, Jubilees) is generally not on api.bible at all.
+                {" "}→ <em>Plan</em> tab → request access to the language.
+                <br />
+                <br />
+                For the books unique to the Ethiopian canon (1 Enoch, Jubilees,
+                etc.) — which api.bible does not carry — switch to the{" "}
+                <button
+                  type="button"
+                  onClick={() => setMode("pseudepigrapha")}
+                  className="underline font-medium"
+                >
+                  Pseudepigrapha
+                </button>
+                {" "}tab. Public-domain English translations are bundled with the app.
               </p>
             )}
           </div>
