@@ -263,12 +263,49 @@ export default function Reader({ bibleId, books, initialPassageId }: Props) {
     if (typeof window === "undefined") return;
 
     if (mode === "podcast") {
-      const url = await ensurePodcastAudio();
-      if (!url) return;
       const a = audioRef.current;
       if (!a) return;
-      if (a.src !== url) a.src = url;
+
+      // iOS Safari: must call play() synchronously inside the user gesture.
+      // If we await the fetch first, the gesture context is lost and play()
+      // is rejected with NotAllowedError. Fix: kick play() now with a tiny
+      // silent placeholder, then swap the real src once the fetch resolves.
+      const SILENT_MP3 =
+        "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQwAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+      if (audioUrl) {
+        // Fast path: cached blob URL exists, plain play()
+        if (a.src !== audioUrl) a.src = audioUrl;
+        try {
+          await a.play();
+          setPlaying(true);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : String(e));
+        }
+        return;
+      }
+
+      // Cold path: must keep gesture alive. Start silent playback NOW,
+      // fetch in parallel, then swap src.
       try {
+        a.src = SILENT_MP3;
+        a.load();
+        const playPromise = a.play();
+        // Don't await yet — fire the fetch first
+        const url = await ensurePodcastAudio();
+        // Now wait for the silent play to actually begin (or fail)
+        try {
+          await playPromise;
+        } catch {
+          /* silent play may reject if browser blocks data URLs — fine,
+             the real swap below will trigger again */
+        }
+        if (!url) {
+          a.pause();
+          return;
+        }
+        a.src = url;
+        a.load();
         await a.play();
         setPlaying(true);
       } catch (e) {
