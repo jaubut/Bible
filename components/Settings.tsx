@@ -42,6 +42,7 @@ export default function Settings() {
   const [mode, setMode] = useState<Mode>("reading");
   const [edgeVoiceA, setEdgeVoiceA] = useState<string>("");
   const [edgeVoiceB, setEdgeVoiceB] = useState<string>("");
+  const [autoplay, setAutoplay] = useState(true);
 
   // Hydrate from localStorage
   useEffect(() => {
@@ -68,6 +69,9 @@ export default function Settings() {
     const eb = localStorage.getItem(STORAGE_KEYS.edgeVoiceB);
     if (ea) setEdgeVoiceA(ea);
     if (eb) setEdgeVoiceB(eb);
+
+    const ap = localStorage.getItem(STORAGE_KEYS.autoplay);
+    if (ap !== null) setAutoplay(ap === "1");
   }, []);
 
   // When companion language changes, reset Edge voices to language defaults
@@ -192,6 +196,11 @@ export default function Settings() {
   function applyMode(m: Mode) {
     setMode(m);
     localStorage.setItem(STORAGE_KEYS.mode, m);
+  }
+
+  function applyAutoplay(v: boolean) {
+    setAutoplay(v);
+    localStorage.setItem(STORAGE_KEYS.autoplay, v ? "1" : "0");
   }
 
   function applyEdgeVoiceA(id: string) {
@@ -333,6 +342,24 @@ export default function Settings() {
                     </button>
                   ))}
                 </div>
+
+                {mode === "podcast" && (
+                  <label className="mt-3 flex items-center justify-between rounded-xl px-3 py-3 hover:bg-[color:var(--color-tint)] transition cursor-pointer">
+                    <div>
+                      <div className="text-sm font-medium">Auto-play next chapter</div>
+                      <div className="t-caption text-[color:var(--color-aside)] mt-0.5">
+                        When a chapter ends, advance to the next one and keep playing.
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={autoplay}
+                      onChange={(e) => applyAutoplay(e.target.checked)}
+                      className="w-5 h-5 accent-[color:var(--color-ink)] cursor-pointer"
+                      aria-label="Auto-play next chapter"
+                    />
+                  </label>
+                )}
               </section>
 
               {/* Companion Language */}

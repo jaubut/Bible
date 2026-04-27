@@ -6,10 +6,10 @@ export default async function ReadChapterPage({
   searchParams,
 }: {
   params: Promise<{ bibleId: string; bookId: string; chapter: string }>;
-  searchParams: Promise<{ mode?: string }>;
+  searchParams: Promise<{ mode?: string; autoplay?: string }>;
 }) {
   const { bibleId, bookId, chapter } = await params;
-  const { mode } = await searchParams;
+  const { mode, autoplay } = await searchParams;
   const decodedBibleId = decodeURIComponent(bibleId);
   const decodedBookId = decodeURIComponent(bookId);
 
@@ -23,6 +23,7 @@ export default async function ReadChapterPage({
       books={books}
       initialPassageId={passageId}
       modeOverride={mode === "podcast" ? "podcast" : undefined}
+      autoplayOnMount={autoplay === "1"}
     />
   );
 }

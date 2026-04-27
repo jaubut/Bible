@@ -31,6 +31,7 @@ type Props = {
   books: Book[];
   initialPassageId: string;
   modeOverride?: "podcast" | "reading";
+  autoplayOnMount?: boolean;
 };
 
 export default function Reader({
@@ -39,6 +40,7 @@ export default function Reader({
   books,
   initialPassageId,
   modeOverride,
+  autoplayOnMount,
 }: Props) {
   const router = useRouter();
   const [passageId] = useState(initialPassageId);
@@ -62,6 +64,7 @@ export default function Reader({
   const [audioLoading, setAudioLoading] = useState(false);
   const [audioCurrent, setAudioCurrent] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
+  const [autoplay, setAutoplay] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -97,6 +100,19 @@ export default function Reader({
       setMode(modeOverride);
     }
   }, [modeOverride]);
+
+  // ?autoplay=1 from a chapter end — try to start playback automatically.
+  // iOS keeps a short audio-permission window open after a natural-end event,
+  // so this often works for in-flow listening; if blocked, user just taps Play.
+  useEffect(() => {
+    if (!autoplayOnMount) return;
+    if (mode !== "podcast") return;
+    const t = setTimeout(() => {
+      play();
+    }, 100);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoplayOnMount, mode]);
 
   function gotoChapter(delta: number) {
     const next = chapter + delta;
@@ -151,6 +167,10 @@ export default function Reader({
       const r = parseFloat(localStorage.getItem(STORAGE_KEYS.voiceRate) ?? "0.95");
       if (!Number.isNaN(r)) setRate(r);
 
+      // Autoplay
+      const ap = localStorage.getItem(STORAGE_KEYS.autoplay);
+      setAutoplay(ap === null ? true : ap === "1");
+
       // Edge voices for podcast mode
       const def = defaultPair(lang);
       const ea = localStorage.getItem(STORAGE_KEYS.edgeVoiceA) || def.a;
@@ -169,7 +189,8 @@ export default function Reader({
         e.key === STORAGE_KEYS.companionLang ||
         e.key === STORAGE_KEYS.mode ||
         e.key === STORAGE_KEYS.edgeVoiceA ||
-        e.key === STORAGE_KEYS.edgeVoiceB
+        e.key === STORAGE_KEYS.edgeVoiceB ||
+        e.key === STORAGE_KEYS.autoplay
       )
         refresh();
     };
@@ -657,7 +678,18 @@ export default function Reader({
         onLoadedMetadata={(e) => setAudioDuration(e.currentTarget.duration)}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false);
+          if (autoplay && mode === "podcast") {
+            // Navigate to next chapter — iOS keeps the audio context alive
+            // for a brief window after natural-end events, so the next page's
+            // ?autoplay=1 trigger has the best chance to play() without a tap.
+            const nextChapter = chapter + 1;
+            router.push(
+              `/read/${encodeURIComponent(bibleId)}/${encodeURIComponent(bookId)}/${nextChapter}?mode=podcast&autoplay=1`,
+            );
+          }
+        }}
       />
 
       {/* Sticky transport bar — bottom of screen */}
@@ -686,46 +718,81 @@ export default function Reader({
               <span className="tabular-nums w-10">{fmtTime(audioDuration)}</span>
             </div>
           )}
-          <div className="flex items-center justify-center gap-3">
-            <button
-              onClick={mode === "podcast" ? back15 : () => gotoChapter(-1)}
-              disabled={mode === "podcast" ? !audioUrl : chapter <= 1}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full hover:bg-[color:var(--color-tint)] disabled:opacity-40 transition"
-              aria-label={mode === "podcast" ? "Back 15 seconds" : "Previous chapter"}
-            >
-              {mode === "podcast" ? (
+          {mode === "podcast" ? (
+            <div className="flex items-center justify-center gap-2 sm:gap-3">
+              <button
+                onClick={() => gotoChapter(-1)}
+                disabled={chapter <= 1}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-[color:var(--color-tint)] disabled:opacity-40 transition"
+                aria-label="Previous chapter"
+              >
+                <ChevronLeft size={22} />
+              </button>
+              <button
+                onClick={back15}
+                disabled={!audioUrl}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-[color:var(--color-tint)] disabled:opacity-40 transition"
+                aria-label="Back 15 seconds"
+              >
                 <span className="text-xs font-medium tabular-nums">−15</span>
-              ) : (
-                <ChevronLeft size={20} />
-              )}
-            </button>
-            <button
-              onClick={() => (playing ? pause() : play(activeIdx ?? 0))}
-              disabled={mode === "podcast" ? audioLoading : !segments.length}
-              className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--color-ink)] text-[color:var(--color-bg)] disabled:opacity-40 transition hover:opacity-90"
-              aria-label={playing ? "Pause" : "Play"}
-            >
-              {audioLoading ? (
-                <Loader2 size={22} className="animate-spin" />
-              ) : playing ? (
-                <Pause size={22} />
-              ) : (
-                <Play size={22} />
-              )}
-            </button>
-            <button
-              onClick={mode === "podcast" ? next : () => gotoChapter(1)}
-              disabled={mode === "podcast" ? !audioUrl : false}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full hover:bg-[color:var(--color-tint)] disabled:opacity-40 transition"
-              aria-label={mode === "podcast" ? "Forward 15 seconds" : "Next chapter"}
-            >
-              {mode === "podcast" ? (
+              </button>
+              <button
+                onClick={() => (playing ? pause() : play(activeIdx ?? 0))}
+                disabled={audioLoading}
+                className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--color-ink)] text-[color:var(--color-bg)] disabled:opacity-40 transition hover:opacity-90"
+                aria-label={playing ? "Pause" : "Play"}
+              >
+                {audioLoading ? (
+                  <Loader2 size={22} className="animate-spin" />
+                ) : playing ? (
+                  <Pause size={22} />
+                ) : (
+                  <Play size={22} />
+                )}
+              </button>
+              <button
+                onClick={next}
+                disabled={!audioUrl}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-[color:var(--color-tint)] disabled:opacity-40 transition"
+                aria-label="Forward 15 seconds"
+              >
                 <span className="text-xs font-medium tabular-nums">+15</span>
-              ) : (
+              </button>
+              <button
+                onClick={() => gotoChapter(1)}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-[color:var(--color-tint)] transition"
+                aria-label="Next chapter"
+              >
+                <ChevronRight size={22} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => gotoChapter(-1)}
+                disabled={chapter <= 1}
+                className="inline-flex h-12 w-12 items-center justify-center rounded-full hover:bg-[color:var(--color-tint)] disabled:opacity-40 transition"
+                aria-label="Previous chapter"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <button
+                onClick={() => (playing ? pause() : play(activeIdx ?? 0))}
+                disabled={!segments.length}
+                className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--color-ink)] text-[color:var(--color-bg)] disabled:opacity-40 transition hover:opacity-90"
+                aria-label={playing ? "Pause" : "Play"}
+              >
+                {playing ? <Pause size={22} /> : <Play size={22} />}
+              </button>
+              <button
+                onClick={() => gotoChapter(1)}
+                className="inline-flex h-12 w-12 items-center justify-center rounded-full hover:bg-[color:var(--color-tint)] transition"
+                aria-label="Next chapter"
+              >
                 <ChevronRight size={20} />
-              )}
-            </button>
-          </div>
+              </button>
+            </div>
+          )}
           {mode === "podcast" && audioLoading && (
             <p className="text-center text-xs text-[color:var(--color-aside)]">
               Generating audio with neural voices… ~30–60s the first time, instant on replays.

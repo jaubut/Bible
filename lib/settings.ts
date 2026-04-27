@@ -62,6 +62,7 @@ export const STORAGE_KEYS = {
   edgeVoiceB: "bible-edge-voice-b",
   companionLang: "bible-companion-lang",
   mode: "bible-mode",
+  autoplay: "bible-autoplay",
   iosTipDismissed: "bible-ios-tip-dismissed",
 } as const;
 
