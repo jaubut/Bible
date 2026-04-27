@@ -29,6 +29,7 @@ import { usePodcast } from "@/components/PodcastContext";
 import Settings from "@/components/Settings";
 import TokenizedText from "@/components/TokenizedText";
 import type { ManifestToken } from "@/lib/tokens";
+import CrossRefsSheet, { type VerseRef } from "@/components/CrossRefsSheet";
 
 type Props = {
   bibleId: string;
@@ -74,6 +75,11 @@ export default function Reader({
   const [autoplay, setAutoplay] = useState(true);
   const [tokenDensity, setTokenDensity] = useState<TokenDensity>("moderate");
   const [manifest, setManifest] = useState<ManifestToken[]>([]);
+  const [verseRefs, setVerseRefs] = useState<{ verse: string; refs: VerseRef[] }[]>([]);
+  const [activeVerseRefs, setActiveVerseRefs] = useState<{
+    verse: string;
+    refs: VerseRef[];
+  } | null>(null);
 
   // Pull live audio state from the persistent context (only meaningful in
   // podcast mode; reading mode keeps using speechSynthesis + segments).
@@ -154,6 +160,11 @@ export default function Reader({
         const json = await res.json();
         if (Array.isArray(json.tokens)) {
           setManifest(json.tokens);
+        }
+        if (Array.isArray(json.verseRefs)) {
+          setVerseRefs(json.verseRefs);
+        } else {
+          setVerseRefs([]);
         }
       } catch {
         /* manifest fetch is best-effort */
@@ -768,15 +779,45 @@ export default function Reader({
             const verseManifest = s.verse
               ? manifest.filter((m) => m.verse === s.verse)
               : [];
+            const refsForVerse = s.verse
+              ? verseRefs.find((vr) => vr.verse === s.verse)?.refs ?? []
+              : [];
+            const inStudy = tokenDensity === "study";
+            const verseLabel = s.verse
+              ? `${currentBook?.name ?? ""} ${chapter}:${s.verse}`
+              : "";
             return (
               <p
                 key={i}
                 className={`my-2 ${active ? "read-active" : ""}`}
               >
                 {s.verse ? (
-                  <sup className="mr-1 text-xs text-[color:var(--color-aside)]">{s.verse}</sup>
+                  inStudy && refsForVerse.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveVerseRefs({
+                          verse: verseLabel,
+                          refs: refsForVerse,
+                        })
+                      }
+                      className="mr-1.5 inline-flex items-center gap-0.5 align-baseline text-xs text-[color:var(--color-accent)] hover:underline tabular-nums"
+                      title={`${refsForVerse.length} cross-reference${refsForVerse.length > 1 ? "s" : ""}`}
+                    >
+                      <span>{s.verse}</span>
+                      <span className="opacity-70">↗{refsForVerse.length}</span>
+                    </button>
+                  ) : (
+                    <sup className="mr-1 text-xs text-[color:var(--color-aside)] tabular-nums">
+                      {s.verse}
+                    </sup>
+                  )
                 ) : null}
-                <TokenizedText text={s.text} manifestTokens={verseManifest} />
+                <TokenizedText
+                  text={s.text}
+                  manifestTokens={verseManifest}
+                  showStrongs={inStudy}
+                />
               </p>
             );
           }
@@ -933,6 +974,15 @@ export default function Reader({
           <summary>Raw script</summary>
           <pre className="whitespace-pre-wrap">{script}</pre>
         </details>
+      )}
+
+      {activeVerseRefs && (
+        <CrossRefsSheet
+          bibleId={bibleId}
+          verseLabel={activeVerseRefs.verse}
+          refs={activeVerseRefs.refs}
+          onClose={() => setActiveVerseRefs(null)}
+        />
       )}
     </main>
   );

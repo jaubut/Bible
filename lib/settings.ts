@@ -67,16 +67,17 @@ export const STORAGE_KEYS = {
   iosTipDismissed: "bible-ios-tip-dismissed",
 } as const;
 
-export type TokenDensity = "minimal" | "moderate" | "dense";
+export type TokenDensity = "minimal" | "moderate" | "dense" | "study";
 
 export const TOKEN_DENSITIES: { id: TokenDensity; name: string; description: string }[] = [
-  { id: "minimal", name: "Minimal", description: "Highlight only divine names." },
-  { id: "moderate", name: "Moderate", description: "People, places, deity names, loanwords." },
-  { id: "dense", name: "Dense", description: "Everything — including titles, numbers, artifacts." },
+  { id: "minimal", name: "Minimal", description: "Divine names only." },
+  { id: "moderate", name: "Moderate", description: "People, places, deity, loanwords." },
+  { id: "dense", name: "Dense", description: "Everything — titles, numbers, artifacts, echoes." },
+  { id: "study", name: "Study", description: "Dense + cross-references, Strong's, echo previews." },
 ];
 
 export function isTokenDensity(v: unknown): v is TokenDensity {
-  return v === "minimal" || v === "moderate" || v === "dense";
+  return v === "minimal" || v === "moderate" || v === "dense" || v === "study";
 }
 
 export function isThemeId(v: unknown): v is ThemeId {

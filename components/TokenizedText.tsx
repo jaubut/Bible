@@ -18,12 +18,17 @@ const CATEGORY_CLASS: Record<LexiconEntry["category"], string> = {
   speech: "tk",
 };
 
+// Show inline Strong's superscript for these categories in Study mode.
+const STRONGS_CATEGORIES = new Set<LexiconEntry["category"]>(["person", "place", "deity"]);
+
 export default function TokenizedText({
   text,
   manifestTokens,
+  showStrongs = false,
 }: {
   text: string;
   manifestTokens?: ManifestToken[];
+  showStrongs?: boolean;
 }) {
   const [active, setActive] = useState<{
     text: string;
@@ -44,6 +49,13 @@ export default function TokenizedText({
             data-category={s.entry.category}
           >
             {s.text}
+            {showStrongs &&
+              s.entry.strongsId &&
+              STRONGS_CATEGORIES.has(s.entry.category) && (
+                <sup className="ml-0.5 text-[0.62em] opacity-60 tabular-nums">
+                  {s.entry.strongsId}
+                </sup>
+              )}
           </button>
         ) : (
           <span key={i}>{s.text}</span>

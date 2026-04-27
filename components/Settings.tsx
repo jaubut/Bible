@@ -405,12 +405,12 @@ export default function Settings() {
                 <h3 className="t-caption font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
                   Highlights
                 </h3>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {TOKEN_DENSITIES.map((d) => (
                     <button
                       key={d.id}
                       onClick={() => applyTokenDensity(d.id)}
-                      className={`rounded-xl px-3 py-2.5 min-h-[60px] text-left transition ${
+                      className={`rounded-xl px-3 py-2.5 min-h-[64px] text-left transition ${
                         tokenDensity === d.id
                           ? "bg-[color:var(--color-ink)]/8"
                           : "hover:bg-[color:var(--color-tint)]"

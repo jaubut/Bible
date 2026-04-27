@@ -29,8 +29,19 @@ const ManifestToken = z.object({
   context: z.string().nullable().optional(),
 });
 
+const VerseRef = z.object({
+  ref: z.string().min(1),
+  note: z.string().min(1),
+});
+
+const VerseRefs = z.object({
+  verse: z.string(),
+  refs: z.array(VerseRef),
+});
+
 const Manifest = z.object({
   tokens: z.array(ManifestToken),
+  verseRefs: z.array(VerseRefs).optional().default([]),
 });
 
 const HAIKU = "claude-haiku-4-5-20251001";
@@ -134,6 +145,7 @@ export async function POST(req: Request) {
 
   const finalManifest = JSON.stringify({
     tokens: validTokens,
+    verseRefs: valid.data.verseRefs,
     bibleId,
     bookId,
     chapter,

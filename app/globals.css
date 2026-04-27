@@ -215,7 +215,13 @@ input, select, textarea {
 }
 .tk:hover { filter: brightness(0.96); }
 
-/* Density toggle on the reading container */
+/* Density toggle on the reading container.
+   minimal  = deity only
+   moderate = + person, place, loanword
+   dense    = + number, title, artifact, time-marker, echo
+   study    = same as dense, plus richer affordances added in JSX
+              (verse cross-reference badges, inline Strong's superscripts)
+*/
 [data-token-density="minimal"] .tk-person,
 [data-token-density="minimal"] .tk-place,
 [data-token-density="minimal"] .tk-loanword,
@@ -224,6 +230,8 @@ input, select, textarea {
 [data-token-density="minimal"] .tk-artifact {
   background: transparent;
   color: inherit;
+  font-weight: inherit;
+  font-style: inherit;
   cursor: text;
 }
 [data-token-density="moderate"] .tk-number,

@@ -429,6 +429,79 @@ const RAW: LexiconEntry[] = [
     category: "loanword",
     description: "Hebrew Pesach; the spring feast commemorating the Exodus, when the angel of death 'passed over' Israelite homes.",
   },
+
+  // ─── Slice C expansion: common gaps ──────────────────────────────────────
+  // More persons (NT)
+  { canonical: "Mary, the mother of Jesus", category: "person", description: "Used as a disambiguation. The Virgin Mary." },
+  { canonical: "Mary, mother of James", category: "person", description: "Disambiguates from Mary the mother of Jesus." },
+  { canonical: "Joseph of Arimathea", category: "person", description: "Wealthy disciple who provided the tomb for Jesus' burial." },
+  { canonical: "Simon", category: "person", description: "Common NT name — Simon Peter, Simon the Zealot, Simon of Cyrene, Simon the Pharisee, Simon Magus, etc. Context disambiguates." },
+  { canonical: "Apollos", category: "person", description: "Eloquent Alexandrian Jewish-Christian teacher in 1 Corinthians; Paul's near-equal in influence at Corinth." },
+  { canonical: "Aquila", category: "person", description: "Tentmaker; husband of Priscilla; co-worker with Paul." },
+  { canonical: "Priscilla", category: "person", description: "Wife of Aquila; teacher of Apollos; co-worker with Paul. Often listed before her husband — unusual for the era." },
+  { canonical: "Lydia", category: "person", description: "Seller of purple dye; Paul's first European convert (Acts 16)." },
+  { canonical: "Onesimus", category: "person", description: "Runaway slave reconciled to Philemon by Paul." },
+  { canonical: "Philemon", category: "person", description: "Christian slave-owner addressed in Paul's shortest letter." },
+  // More OT
+  { canonical: "Melchizedek", category: "person", description: "Priest-king of Salem who blessed Abram (Gen 14); typological priesthood in Hebrews 7." },
+  { canonical: "Hagar", category: "person", description: "Egyptian servant of Sarah; mother of Ishmael." },
+  { canonical: "Boaz", category: "person", description: "Wealthy Bethlehemite who married Ruth; ancestor of David and Jesus." },
+  { canonical: "Rahab", category: "person", description: "Jericho prostitute who hid Joshua's spies; ancestor of Jesus (Matt 1:5)." },
+  { canonical: "Hannah", category: "person", description: "Mother of Samuel; her prayer in 1 Sam 2 is a model for Mary's Magnificat." },
+  { canonical: "Eli", category: "person", description: "High priest at Shiloh; mentor of Samuel." },
+  { canonical: "Jonathan", category: "person", description: "Son of Saul; covenant friend of David." },
+  { canonical: "Cyrus", category: "person", description: "Persian king who ended the Babylonian exile; called 'my anointed' by Isaiah (Isa 45:1)." },
+  { canonical: "Nebuchadnezzar", category: "person", description: "Babylonian king who destroyed Jerusalem in 586 BC; subject of Daniel's interpretations." },
+
+  // Titles / Roles (often functions like proper nouns in narrative)
+  { canonical: "Pharisees", category: "title", description: "Lay teachers focused on oral Torah and ritual purity; Jesus' frequent interlocutors." },
+  { canonical: "Pharisee", category: "title", description: "A member of the lay-teacher movement; rigorous about oral Torah." },
+  { canonical: "Sadducees", category: "title", description: "Priestly aristocratic faction; rejected oral law and the resurrection." },
+  { canonical: "Sadducee", category: "title", description: "Member of the priestly aristocratic faction." },
+  { canonical: "scribes", category: "title", description: "Professional Torah-copyists and interpreters." },
+  { canonical: "Sanhedrin", category: "title", description: "The supreme Jewish council in Jerusalem; presided over Jesus' trial." },
+  { canonical: "high priest", category: "title", description: "Chief temple priest; only one allowed in the Holy of Holies, once a year on Yom Kippur." },
+  { canonical: "centurion", category: "title", description: "Roman officer commanding ~80 men; several appear sympathetically in the Gospels and Acts." },
+  { canonical: "Levite", category: "title", description: "Member of the tribe of Levi; assistant to the priests." },
+  { canonical: "Nazirite", category: "title", description: "One under a vow (Num 6) abstaining from wine, hair-cutting, and corpse-contact. Samson, Samuel, John the Baptist." },
+  { canonical: "tax collector", category: "title", description: "Jewish collaborator with Rome's tax-farming system; despised. Matthew, Zacchaeus." },
+  { canonical: "Zealots", category: "title", description: "Revolutionary movement opposed to Roman rule; Simon the apostle is identified with them." },
+  { canonical: "Gentiles", category: "title", description: "Greek ethne, 'the nations' — non-Jews. Salvation for them is the central scandal of Acts." },
+  { canonical: "the Twelve", category: "title", description: "The inner circle of Jesus' apostles; the number replaces the twelve patriarchs and signals the renewal of Israel." },
+  { canonical: "the Word", category: "title", description: "Greek Logos — used in John 1 as a title for the pre-incarnate Christ; also a Stoic / Hellenistic Jewish category." },
+  { canonical: "Lamb of God", category: "title", description: "John the Baptist's title for Jesus, fusing the Passover lamb and the Suffering Servant of Isaiah 53." },
+  { canonical: "the Prophet", category: "title", description: "Often refers to the prophet-like-Moses promised in Deut 18:15." },
+
+  // Artifacts
+  { canonical: "the ark", category: "artifact", description: "Either the Ark of the Covenant (golden chest containing the tablets) or Noah's ark, depending on context." },
+  { canonical: "the Ark of the Covenant", category: "artifact", description: "Gold-overlaid acacia chest holding the tablets of the Law; locus of God's presence in the wilderness and the temple." },
+  { canonical: "the tabernacle", category: "artifact", description: "The portable wilderness sanctuary; precursor to the temple." },
+  { canonical: "the Temple", category: "artifact", description: "The Jerusalem sanctuary — first built by Solomon, rebuilt by Zerubbabel, expanded by Herod, destroyed by Rome AD 70." },
+  { canonical: "the temple", category: "artifact", description: "The Jerusalem sanctuary." },
+  { canonical: "the veil", category: "artifact", description: "The curtain separating the Holy Place from the Holy of Holies; torn at Jesus' death." },
+  { canonical: "the cross", category: "artifact", description: "Roman instrument of execution by crucifixion; shameful, public, slow death." },
+  { canonical: "the manger", category: "artifact", description: "Animal feeding-trough where the infant Jesus was laid (Luke 2:7)." },
+
+  // Places — common gaps
+  { canonical: "Areopagus", category: "place", description: "Athenian council hill where Paul addressed the philosophers (Acts 17)." },
+  { canonical: "Mars Hill", category: "place", description: "Latin name for the Areopagus." },
+  { canonical: "Mesopotamia", category: "place", description: "Land 'between rivers' — between the Tigris and Euphrates; cradle of civilization." },
+  { canonical: "Aram", category: "place", description: "Ancient Syria; Abraham's ancestral region." },
+  { canonical: "Nineveh", category: "place", description: "Capital of Assyria; subject of Jonah's reluctant mission." },
+  { canonical: "Shiloh", category: "place", description: "Earliest centralized sanctuary in Israel; where the tabernacle stood for ~300 years." },
+  { canonical: "Bashan", category: "place", description: "Region east of the Jordan known for its strong cattle and oak trees." },
+  { canonical: "Negev", category: "place", description: "The arid southern desert region of Israel." },
+
+  // Loanwords
+  { canonical: "tetelestai", category: "loanword", description: "Greek 'it is finished' — Jesus' final word from the cross (John 19:30); commercial term meaning 'paid in full.'", original: "τετέλεσται" },
+  { canonical: "ephod", category: "loanword", description: "The high priest's apron-like vestment; held the breastplate with the Urim and Thummim.", original: "אֵפוֹד" },
+  { canonical: "Urim", category: "loanword", description: "Means of priestly divination kept in the breastplate; nature uncertain.", original: "אוּרִים" },
+  { canonical: "Thummim", category: "loanword", description: "Companion to Urim; together they functioned as a means of revealing God's will.", original: "תֻּמִּים" },
+  { canonical: "Pentecost", category: "loanword", description: "Greek pentekostē, 'fiftieth'; the Feast of Weeks, fifty days after Passover. The Spirit fell on the disciples (Acts 2)." },
+  { canonical: "Logos", category: "loanword", description: "Greek for 'word, reason, principle.' John 1's title for the pre-incarnate Christ.", original: "λόγος" },
+
+  // Numbers (these are static-likely)
+  { canonical: "twelve tribes", category: "title", description: "The twelve descendants of Jacob/Israel forming the people of God. Echoed in the Twelve apostles." },
 ];
 
 // Build lookup tables. We keep two:

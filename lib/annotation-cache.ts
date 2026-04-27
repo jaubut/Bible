@@ -27,8 +27,12 @@ function db() {
   return _db;
 }
 
+// v2 cache key — bump when the manifest schema changes so old chapters
+// regenerate with the new fields (e.g. verseRefs).
+const CACHE_VERSION = "v2";
+
 export function manifestKey(bibleId: string, bookId: string, chapter: string): string {
-  return `${bibleId}::${bookId}::${chapter}`;
+  return `${CACHE_VERSION}::${bibleId}::${bookId}::${chapter}`;
 }
 
 export function getManifest(key: string): string | null {
