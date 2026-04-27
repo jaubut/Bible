@@ -63,8 +63,21 @@ export const STORAGE_KEYS = {
   companionLang: "bible-companion-lang",
   mode: "bible-mode",
   autoplay: "bible-autoplay",
+  tokenDensity: "bible-token-density",
   iosTipDismissed: "bible-ios-tip-dismissed",
 } as const;
+
+export type TokenDensity = "minimal" | "moderate" | "dense";
+
+export const TOKEN_DENSITIES: { id: TokenDensity; name: string; description: string }[] = [
+  { id: "minimal", name: "Minimal", description: "Highlight only divine names." },
+  { id: "moderate", name: "Moderate", description: "People, places, deity names, loanwords." },
+  { id: "dense", name: "Dense", description: "Everything — including titles, numbers, artifacts." },
+];
+
+export function isTokenDensity(v: unknown): v is TokenDensity {
+  return v === "minimal" || v === "moderate" || v === "dense";
+}
 
 export function isThemeId(v: unknown): v is ThemeId {
   return v === "parchment" || v === "codex" || v === "sanctuary";

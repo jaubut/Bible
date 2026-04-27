@@ -11,8 +11,10 @@ import {
   STORAGE_KEYS,
   type CompanionLang,
   type Mode,
+  type TokenDensity,
   isCompanionLang,
   isMode,
+  isTokenDensity,
 } from "@/lib/settings";
 import {
   listVoices,
@@ -25,6 +27,7 @@ import {
 import { saveLastRead } from "@/lib/last-read";
 import { usePodcast } from "@/components/PodcastContext";
 import Settings from "@/components/Settings";
+import TokenizedText from "@/components/TokenizedText";
 
 type Props = {
   bibleId: string;
@@ -68,6 +71,7 @@ export default function Reader({
   const [nextAudioUrl, setNextAudioUrl] = useState<string | null>(null);
   const [audioLoading, setAudioLoading] = useState(false);
   const [autoplay, setAutoplay] = useState(true);
+  const [tokenDensity, setTokenDensity] = useState<TokenDensity>("moderate");
 
   // Pull live audio state from the persistent context (only meaningful in
   // podcast mode; reading mode keeps using speechSynthesis + segments).
@@ -319,6 +323,10 @@ export default function Reader({
       const ap = localStorage.getItem(STORAGE_KEYS.autoplay);
       setAutoplay(ap === null ? true : ap === "1");
 
+      // Token density
+      const td = localStorage.getItem(STORAGE_KEYS.tokenDensity);
+      if (isTokenDensity(td)) setTokenDensity(td);
+
       // Edge voices for podcast mode
       const def = defaultPair(lang);
       const ea = localStorage.getItem(STORAGE_KEYS.edgeVoiceA) || def.a;
@@ -338,7 +346,8 @@ export default function Reader({
         e.key === STORAGE_KEYS.mode ||
         e.key === STORAGE_KEYS.edgeVoiceA ||
         e.key === STORAGE_KEYS.edgeVoiceB ||
-        e.key === STORAGE_KEYS.autoplay
+        e.key === STORAGE_KEYS.autoplay ||
+        e.key === STORAGE_KEYS.tokenDensity
       )
         refresh();
     };
@@ -655,7 +664,10 @@ export default function Reader({
         )}
       </div>
 
-      <article className="prose-stone mt-8 max-w-none text-[17px] leading-[1.75]">
+      <article
+        className="prose-stone mt-8 max-w-none text-[17px] leading-[1.75]"
+        data-token-density={tokenDensity}
+      >
         {loading && !segments.length && (
           <p className="text-[color:var(--color-aside)]">Preparing the companion…</p>
         )}
@@ -726,7 +738,7 @@ export default function Reader({
               {s.verse ? (
                 <sup className="mr-1 text-xs text-[color:var(--color-aside)]">{s.verse}</sup>
               ) : null}
-              {s.text}
+              <TokenizedText text={s.text} />
             </p>
           );
         })}

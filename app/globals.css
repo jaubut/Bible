@@ -202,6 +202,101 @@ input, select, textarea {
   border-color: var(--color-ink);
 }
 
+/* ─── Bible language-server tokens (VSCode-style highlighting) ───────── */
+.tk {
+  border-radius: 4px;
+  padding: 0 2px;
+  margin: 0 -2px;
+  cursor: pointer;
+  transition: filter 0.15s ease-out;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.tk:hover { filter: brightness(0.96); }
+
+/* Density toggle on the reading container */
+[data-token-density="minimal"] .tk-person,
+[data-token-density="minimal"] .tk-place,
+[data-token-density="minimal"] .tk-loanword,
+[data-token-density="minimal"] .tk-number,
+[data-token-density="minimal"] .tk-title,
+[data-token-density="minimal"] .tk-artifact {
+  background: transparent;
+  color: inherit;
+  cursor: text;
+}
+[data-token-density="moderate"] .tk-number,
+[data-token-density="moderate"] .tk-title,
+[data-token-density="moderate"] .tk-artifact {
+  background: transparent;
+  color: inherit;
+  cursor: text;
+}
+
+/* Parchment palette */
+:root,
+[data-theme="parchment"] {
+  --tk-person-bg: rgba(139, 90, 43, 0.14);
+  --tk-person-fg: #6b3d10;
+  --tk-place-bg: rgba(42, 90, 139, 0.12);
+  --tk-place-fg: #1d4e7a;
+  --tk-deity-bg: rgba(180, 130, 0, 0.18);
+  --tk-deity-fg: #7a5800;
+  --tk-loanword-bg: rgba(80, 130, 80, 0.13);
+  --tk-loanword-fg: #2e5e2e;
+  --tk-number-bg: rgba(160, 80, 140, 0.11);
+  --tk-number-fg: #6b3060;
+  --tk-title-bg: rgba(100, 100, 40, 0.10);
+  --tk-title-fg: #4a4a10;
+  --tk-artifact-bg: rgba(160, 100, 50, 0.10);
+  --tk-artifact-fg: #6b3d10;
+}
+
+/* Codex palette */
+[data-theme="codex"] {
+  --tk-person-bg: rgba(210, 130, 80, 0.18);
+  --tk-person-fg: #e8a870;
+  --tk-place-bg: rgba(80, 160, 220, 0.16);
+  --tk-place-fg: #7ab8e8;
+  --tk-deity-bg: rgba(220, 180, 60, 0.22);
+  --tk-deity-fg: #d4a857;
+  --tk-loanword-bg: rgba(100, 200, 100, 0.15);
+  --tk-loanword-fg: #7dd87d;
+  --tk-number-bg: rgba(180, 120, 220, 0.16);
+  --tk-number-fg: #c88ef0;
+  --tk-title-bg: rgba(180, 180, 80, 0.13);
+  --tk-title-fg: #b8b84a;
+  --tk-artifact-bg: rgba(200, 140, 80, 0.14);
+  --tk-artifact-fg: #c8a060;
+}
+
+/* Sanctuary palette */
+[data-theme="sanctuary"] {
+  --tk-person-bg: rgba(124, 58, 237, 0.10);
+  --tk-person-fg: #5b21b6;
+  --tk-place-bg: rgba(37, 99, 235, 0.10);
+  --tk-place-fg: #1d4ed8;
+  --tk-deity-bg: rgba(180, 130, 0, 0.12);
+  --tk-deity-fg: #92400e;
+  --tk-loanword-bg: rgba(16, 128, 64, 0.10);
+  --tk-loanword-fg: #065f46;
+  --tk-number-bg: rgba(190, 18, 60, 0.09);
+  --tk-number-fg: #9f1239;
+  --tk-title-bg: rgba(20, 150, 150, 0.09);
+  --tk-title-fg: #0f766e;
+  --tk-artifact-bg: rgba(180, 90, 20, 0.09);
+  --tk-artifact-fg: #7c2d12;
+}
+
+.tk-person { background: var(--tk-person-bg); color: var(--tk-person-fg); }
+.tk-place { background: var(--tk-place-bg); color: var(--tk-place-fg); }
+.tk-deity { background: var(--tk-deity-bg); color: var(--tk-deity-fg); font-weight: 600; }
+.tk-loanword { background: var(--tk-loanword-bg); color: var(--tk-loanword-fg); font-style: italic; }
+.tk-number { background: var(--tk-number-bg); color: var(--tk-number-fg); }
+.tk-title { background: var(--tk-title-bg); color: var(--tk-title-fg); }
+.tk-artifact { background: var(--tk-artifact-bg); color: var(--tk-artifact-fg); }
+
 /* ─── Scrollbar polish ───────────────────────────────── */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb {

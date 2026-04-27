@@ -7,12 +7,15 @@ import {
   STORAGE_KEYS,
   COMPANION_LANGS,
   MODES,
+  TOKEN_DENSITIES,
   type ThemeId,
   type CompanionLang,
   type Mode,
+  type TokenDensity,
   isThemeId,
   isCompanionLang,
   isMode,
+  isTokenDensity,
 } from "@/lib/settings";
 import {
   listVoices,
@@ -43,6 +46,7 @@ export default function Settings() {
   const [edgeVoiceA, setEdgeVoiceA] = useState<string>("");
   const [edgeVoiceB, setEdgeVoiceB] = useState<string>("");
   const [autoplay, setAutoplay] = useState(true);
+  const [tokenDensity, setTokenDensity] = useState<TokenDensity>("moderate");
 
   // Hydrate from localStorage
   useEffect(() => {
@@ -72,6 +76,9 @@ export default function Settings() {
 
     const ap = localStorage.getItem(STORAGE_KEYS.autoplay);
     if (ap !== null) setAutoplay(ap === "1");
+
+    const td = localStorage.getItem(STORAGE_KEYS.tokenDensity);
+    if (isTokenDensity(td)) setTokenDensity(td);
   }, []);
 
   // When companion language changes, reset Edge voices to language defaults
@@ -201,6 +208,11 @@ export default function Settings() {
   function applyAutoplay(v: boolean) {
     setAutoplay(v);
     localStorage.setItem(STORAGE_KEYS.autoplay, v ? "1" : "0");
+  }
+
+  function applyTokenDensity(td: TokenDensity) {
+    setTokenDensity(td);
+    localStorage.setItem(STORAGE_KEYS.tokenDensity, td);
   }
 
   function applyEdgeVoiceA(id: string) {
@@ -385,6 +397,35 @@ export default function Settings() {
                 </div>
                 <p className="mt-2 t-caption text-[color:var(--color-aside)] leading-relaxed">
                   Verses stay in the Bible&apos;s original language. The companion&apos;s asides — and a brief gloss after each verse in another language — appear in your chosen language.
+                </p>
+              </section>
+
+              {/* Highlights — Bible language-server tokens */}
+              <section>
+                <h3 className="t-caption font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
+                  Highlights
+                </h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {TOKEN_DENSITIES.map((d) => (
+                    <button
+                      key={d.id}
+                      onClick={() => applyTokenDensity(d.id)}
+                      className={`rounded-xl px-3 py-2.5 min-h-[60px] text-left transition ${
+                        tokenDensity === d.id
+                          ? "bg-[color:var(--color-ink)]/8"
+                          : "hover:bg-[color:var(--color-tint)]"
+                      }`}
+                      aria-pressed={tokenDensity === d.id}
+                    >
+                      <div className="text-sm font-medium">{d.name}</div>
+                      <div className="t-caption text-[color:var(--color-aside)] mt-0.5">
+                        {d.description}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-3 t-caption text-[color:var(--color-aside)] leading-relaxed">
+                  Color-coded tokens like syntax highlighting in a code editor — tap any highlighted word to see who, where, and what. Lexicon: STEPBible.org (CC BY 4.0).
                 </p>
               </section>
 
