@@ -13,8 +13,14 @@ export default async function ReadChapterPage({
   const decodedBibleId = decodeURIComponent(bibleId);
   const decodedBookId = decodeURIComponent(bookId);
 
-  const books = await bibleApi.listBooks(decodedBibleId);
+  const [books, chapters] = await Promise.all([
+    bibleApi.listBooks(decodedBibleId),
+    bibleApi.listChapters(decodedBibleId, decodedBookId),
+  ]);
   const passageId = `${decodedBookId}.${chapter}`;
+  const totalChapters = chapters.filter((c) =>
+    /^\d+$/.test(c.number),
+  ).length;
 
   return (
     <Reader
@@ -22,6 +28,7 @@ export default async function ReadChapterPage({
       bookId={decodedBookId}
       books={books}
       initialPassageId={passageId}
+      totalChapters={totalChapters}
       modeOverride={mode === "podcast" ? "podcast" : undefined}
       autoplayOnMount={autoplay === "1"}
     />

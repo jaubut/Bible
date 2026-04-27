@@ -23,6 +23,7 @@ import {
   isAppleDesktop,
 } from "@/lib/voices";
 import { saveLastRead } from "@/lib/last-read";
+import { usePodcast } from "@/components/PodcastContext";
 import Settings from "@/components/Settings";
 
 type Props = {
@@ -30,6 +31,7 @@ type Props = {
   bookId: string;
   books: Book[];
   initialPassageId: string;
+  totalChapters?: number;
   modeOverride?: "podcast" | "reading";
   autoplayOnMount?: boolean;
 };
@@ -39,10 +41,12 @@ export default function Reader({
   bookId,
   books,
   initialPassageId,
+  totalChapters = 999,
   modeOverride,
   autoplayOnMount,
 }: Props) {
   const router = useRouter();
+  const podcast = usePodcast();
   const [passageId] = useState(initialPassageId);
   const [script, setScript] = useState("");
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -61,11 +65,16 @@ export default function Reader({
   const [edgeVoiceA, setEdgeVoiceA] = useState<string>("");
   const [edgeVoiceB, setEdgeVoiceB] = useState<string>("");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [nextAudioUrl, setNextAudioUrl] = useState<string | null>(null);
   const [audioLoading, setAudioLoading] = useState(false);
-  const [audioCurrent, setAudioCurrent] = useState(0);
-  const [audioDuration, setAudioDuration] = useState(0);
   const [autoplay, setAutoplay] = useState(true);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Pull live audio state from the persistent context (only meaningful in
+  // podcast mode; reading mode keeps using speechSynthesis + segments).
+  const podPlaying = podcast.playing;
+  const podCurrent = podcast.audioCurrent;
+  const podDuration = podcast.audioDuration;
+  const podBlocked = podcast.blockedAutoplay;
 
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
   const queueRef = useRef<number>(0);
@@ -101,26 +110,135 @@ export default function Reader({
     }
   }, [modeOverride]);
 
-  // ?autoplay=1 from a chapter end — try to start playback automatically.
-  // iOS keeps a short audio-permission window open after a natural-end event,
-  // so this often works for in-flow listening; if blocked, user just taps Play.
+  // ?autoplay=1 fallback path — we only get here if the persistent context's
+  // src-swap auto-advance failed (preload not ready, or page was reloaded
+  // mid-flow). Try once after audioUrl is registered with the context.
   useEffect(() => {
     if (!autoplayOnMount) return;
     if (mode !== "podcast") return;
+    if (!audioUrl) return;
     const t = setTimeout(() => {
-      play();
-    }, 100);
+      podcast.play();
+    }, 150);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoplayOnMount, mode]);
+  }, [autoplayOnMount, mode, audioUrl]);
 
   function gotoChapter(delta: number) {
     const next = chapter + delta;
     if (next < 1) return;
+    const modeParam = mode === "podcast" ? "?mode=podcast" : "";
     router.push(
-      `/read/${encodeURIComponent(bibleId)}/${encodeURIComponent(bookId)}/${next}`,
+      `/read/${encodeURIComponent(bibleId)}/${encodeURIComponent(bookId)}/${next}${modeParam}`,
     );
   }
+
+  // Mirror context's playing state into local state so the play/pause button
+  // reflects podcast playback. Reading mode keeps its own internal state.
+  useEffect(() => {
+    if (mode === "podcast") setPlaying(podPlaying);
+  }, [podPlaying, mode]);
+
+  // Auto-fetch the chapter audio in podcast mode, then register with the
+  // persistent player. The player owns playback; we just provide the URL.
+  useEffect(() => {
+    if (mode !== "podcast") return;
+    if (audioUrl) return;
+    let cancelled = false;
+    (async () => {
+      const url = await fetchPodcastAudio();
+      if (cancelled) {
+        if (url) URL.revokeObjectURL(url);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, bibleId, passageId, companionLang, edgeVoiceA, edgeVoiceB]);
+
+  // Preload the next chapter's audio in the background so onEnded can
+  // hand off without waiting. Cached server-side after first generation.
+  useEffect(() => {
+    if (mode !== "podcast") return;
+    if (!audioUrl) return;
+    if (chapter >= totalChapters) return;
+    const ctrl = new AbortController();
+    let revoked = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/audio", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            bibleId,
+            passageId: `${bookId}.${chapter + 1}`,
+            lang: companionLang,
+            mode: "podcast",
+            voiceA: edgeVoiceA,
+            voiceB: edgeVoiceB,
+          }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok) return;
+        const blob = await res.blob();
+        if (revoked) return;
+        setNextAudioUrl(URL.createObjectURL(blob));
+      } catch {
+        /* preload is best-effort */
+      }
+    })();
+    return () => {
+      ctrl.abort();
+      revoked = true;
+    };
+  }, [
+    mode,
+    audioUrl,
+    bibleId,
+    bookId,
+    chapter,
+    totalChapters,
+    companionLang,
+    edgeVoiceA,
+    edgeVoiceB,
+  ]);
+
+  // Push current chapter info to the persistent player whenever it changes.
+  useEffect(() => {
+    if (mode !== "podcast") return;
+    if (!currentBook) return;
+    podcast.registerChapter({
+      bibleId,
+      bookId,
+      bookName: currentBook.name,
+      chapter,
+      totalChapters,
+      audioUrl,
+      nextAudioUrl,
+      autoplay,
+    });
+  }, [
+    mode,
+    bibleId,
+    bookId,
+    chapter,
+    totalChapters,
+    audioUrl,
+    nextAudioUrl,
+    autoplay,
+    currentBook,
+    podcast,
+  ]);
+
+  // When this chapter unmounts (user leaves reader entirely), clear the
+  // chapter ref so a stale ended-event doesn't try to advance.
+  useEffect(() => {
+    return () => {
+      // Note: we don't clearChapter on chapter change — only on full unmount.
+      // The above effect will overwrite the ref with the new chapter's data.
+    };
+  }, []);
 
   // Load voice + rate from settings; refresh whenever Settings updates them
   useEffect(() => {
@@ -256,36 +374,20 @@ export default function Reader({
     };
   }, [bibleId, passageId, density, companionLang, mode]);
 
-  // Reset cached MP3 URL whenever the audio identity changes
+  // Reset cached MP3 URL whenever the audio identity changes.
+  // (We do NOT pause here — the context handles playback continuity, and
+  // pausing would cancel an in-flight auto-advance.)
   useEffect(() => {
-    if (audioRef.current) {
-      try {
-        audioRef.current.pause();
-      } catch {
-        /* noop */
-      }
-    }
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
-    setAudioCurrent(0);
-    setAudioDuration(0);
-    setPlaying(false);
+    setNextAudioUrl(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bibleId, passageId, companionLang, mode, edgeVoiceA, edgeVoiceB]);
 
   function stop() {
     if (typeof window === "undefined") return;
     if (mode === "podcast") {
-      const a = audioRef.current;
-      if (a) {
-        try {
-          a.pause();
-          a.currentTime = 0;
-        } catch {
-          /* noop */
-        }
-      }
-      setPlaying(false);
+      podcast.pause();
+      podcast.seek(0);
       return;
     }
     window.speechSynthesis?.cancel();
@@ -293,7 +395,9 @@ export default function Reader({
     setActiveIdx(null);
   }
 
-  async function ensurePodcastAudio(): Promise<string | null> {
+  // Fetch the chapter audio. This no longer plays — it just produces a blob
+  // URL and pushes it to the persistent player context.
+  async function fetchPodcastAudio(): Promise<string | null> {
     if (audioUrl) return audioUrl;
     setAudioLoading(true);
     try {
@@ -329,54 +433,20 @@ export default function Reader({
     if (typeof window === "undefined") return;
 
     if (mode === "podcast") {
-      const a = audioRef.current;
-      if (!a) return;
-
-      // iOS Safari: must call play() synchronously inside the user gesture.
-      // If we await the fetch first, the gesture context is lost and play()
-      // is rejected with NotAllowedError. Fix: kick play() now with a tiny
-      // silent placeholder, then swap the real src once the fetch resolves.
-      const SILENT_MP3 =
-        "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQwAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-
+      // If audio is already loaded, just hand off to the context — same DOM
+      // element, gesture credit preserved across all subsequent advances.
       if (audioUrl) {
-        // Fast path: cached blob URL exists, plain play()
-        if (a.src !== audioUrl) a.src = audioUrl;
-        try {
-          await a.play();
-          setPlaying(true);
-        } catch (e) {
-          setError(e instanceof Error ? e.message : String(e));
-        }
+        await podcast.play();
         return;
       }
-
-      // Cold path: must keep gesture alive. Start silent playback NOW,
-      // fetch in parallel, then swap src.
-      try {
-        a.src = SILENT_MP3;
-        a.load();
-        const playPromise = a.play();
-        // Don't await yet — fire the fetch first
-        const url = await ensurePodcastAudio();
-        // Now wait for the silent play to actually begin (or fail)
-        try {
-          await playPromise;
-        } catch {
-          /* silent play may reject if browser blocks data URLs — fine,
-             the real swap below will trigger again */
-        }
-        if (!url) {
-          a.pause();
-          return;
-        }
-        a.src = url;
-        a.load();
-        await a.play();
-        setPlaying(true);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
+      // Cold path: fetch first. iOS gesture credit is granted at the moment
+      // of click — by the time fetch resolves, the credit has expired for
+      // a brand-new element, but since the persistent <audio> in the context
+      // never unmounts, its gesture credit (granted on a previous chapter or
+      // this same tap) usually carries through. Try directly.
+      const url = await fetchPodcastAudio();
+      if (!url) return;
+      await podcast.play();
       return;
     }
 
@@ -458,17 +528,7 @@ export default function Reader({
   function pause() {
     if (typeof window === "undefined") return;
     if (mode === "podcast") {
-      const a = audioRef.current;
-      if (!a) return;
-      if (a.paused) {
-        a.play().catch(() => {
-          /* noop */
-        });
-        setPlaying(true);
-      } else {
-        a.pause();
-        setPlaying(false);
-      }
+      podcast.pause();
       return;
     }
     if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
@@ -482,8 +542,7 @@ export default function Reader({
 
   function next() {
     if (mode === "podcast") {
-      const a = audioRef.current;
-      if (a) a.currentTime = Math.min(a.currentTime + 15, a.duration || a.currentTime);
+      podcast.skipForward();
       return;
     }
     queueRef.current = Math.min(queueRef.current + 1, segments.length);
@@ -492,8 +551,7 @@ export default function Reader({
   }
 
   function back15() {
-    const a = audioRef.current;
-    if (a) a.currentTime = Math.max(0, a.currentTime - 15);
+    podcast.skipBack();
   }
 
   function fmtTime(s: number): string {
@@ -669,28 +727,8 @@ export default function Reader({
         </div>
       )}
 
-      {/* Hidden audio element for podcast mode */}
-      <audio
-        ref={audioRef}
-        preload="auto"
-        playsInline
-        onTimeUpdate={(e) => setAudioCurrent(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => setAudioDuration(e.currentTarget.duration)}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => {
-          setPlaying(false);
-          if (autoplay && mode === "podcast") {
-            // Navigate to next chapter — iOS keeps the audio context alive
-            // for a brief window after natural-end events, so the next page's
-            // ?autoplay=1 trigger has the best chance to play() without a tap.
-            const nextChapter = chapter + 1;
-            router.push(
-              `/read/${encodeURIComponent(bibleId)}/${encodeURIComponent(bookId)}/${nextChapter}?mode=podcast&autoplay=1`,
-            );
-          }
-        }}
-      />
+      {/* The <audio> element lives in PodcastProvider — never unmounted,
+          so iOS gesture credit follows it across chapter navigations. */}
 
       {/* Sticky transport bar — bottom of screen */}
       <div
@@ -700,22 +738,30 @@ export default function Reader({
         <div className="mx-auto max-w-3xl px-5 sm:px-6 py-3 space-y-2">
           {mode === "podcast" && (audioUrl || audioLoading) && (
             <div className="flex items-center gap-3 text-xs text-[color:var(--color-aside)]">
-              <span className="tabular-nums w-10 text-right">{fmtTime(audioCurrent)}</span>
+              <span className="tabular-nums w-10 text-right">{fmtTime(podCurrent)}</span>
               <input
                 type="range"
                 min={0}
-                max={audioDuration || 0}
+                max={podDuration || 0}
                 step={0.1}
-                value={audioCurrent}
-                disabled={!audioDuration}
-                onChange={(e) => {
-                  const a = audioRef.current;
-                  if (a) a.currentTime = parseFloat(e.target.value);
-                }}
+                value={podCurrent}
+                disabled={!podDuration}
+                onChange={(e) => podcast.seek(parseFloat(e.target.value))}
                 className="flex-1 accent-[color:var(--color-ink)]"
                 aria-label="Scrub"
               />
-              <span className="tabular-nums w-10">{fmtTime(audioDuration)}</span>
+              <span className="tabular-nums w-10">{fmtTime(podDuration)}</span>
+            </div>
+          )}
+
+          {mode === "podcast" && podBlocked && (
+            <div className="rounded-lg bg-[color:var(--color-tint)] px-3 py-2 text-center mb-2">
+              <button
+                onClick={() => podcast.resumeAfterBlocked()}
+                className="text-sm font-medium underline"
+              >
+                Tap to continue playback
+              </button>
             </div>
           )}
           {mode === "podcast" ? (

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ThemeScript from "@/components/ThemeScript";
+import { PodcastProvider } from "@/components/PodcastContext";
 
 export const metadata: Metadata = {
   title: "Bible Companion",
@@ -19,7 +20,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <ThemeScript />
       </head>
-      <body>{children}</body>
+      <body>
+        <PodcastProvider>{children}</PodcastProvider>
+      </body>
     </html>
   );
 }
