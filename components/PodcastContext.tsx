@@ -26,6 +26,9 @@ export type ChapterRef = {
   audioUrl: string | null; // blob URL for current chapter
   nextAudioUrl: string | null; // preloaded next chapter, or null
   autoplay: boolean; // user setting
+  // Async fetch the next chapter's audio if preload wasn't ready when we
+  // need to advance. Runs inside the natural-end gesture window.
+  fetchNextAudio?: () => Promise<string | null>;
 };
 
 type PodcastContextValue = {
@@ -62,6 +65,7 @@ export function PodcastProvider({ children }: { children: React.ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chapterRef = useRef<ChapterRef | null>(null);
   const previousBlobRef = useRef<string | null>(null);
+  const advancingRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
   const [audioCurrent, setAudioCurrent] = useState(0);
@@ -90,43 +94,73 @@ export function PodcastProvider({ children }: { children: React.ReactNode }) {
     el.addEventListener("pause", () => setPlaying(false));
     el.addEventListener("error", () => setError("Audio playback error"));
 
-    el.addEventListener("ended", () => {
-      setPlaying(false);
+    // Async-safe advance handler — used by both ended and the near-end
+    // timeupdate fallback. Idempotent via advancingRef.
+    async function tryAdvance(reason: string) {
       const c = chapterRef.current;
       if (!c) return;
       if (!c.autoplay) return;
       if (c.chapter >= c.totalChapters) return;
+      if (advancingRef.current) return;
+      advancingRef.current = true;
 
       const next = c.chapter + 1;
 
-      if (c.nextAudioUrl) {
-        // Best path — same element, src swap, gesture credit preserved
-        // Revoke previous current (we're moving forward)
-        if (previousBlobRef.current && previousBlobRef.current !== c.audioUrl) {
-          URL.revokeObjectURL(previousBlobRef.current);
+      try {
+        let url = c.nextAudioUrl;
+        if (!url && c.fetchNextAudio) {
+          // Preload wasn't ready — fetch within the gesture window
+          url = await c.fetchNextAudio();
         }
-        previousBlobRef.current = c.audioUrl;
-        el.src = c.nextAudioUrl;
-        el.load();
-        el.play().catch((e: unknown) => {
-          // iOS 17.2.x src-swap regression — surface "Tap to continue"
-          setBlockedAutoplay(true);
-          setError(
-            e instanceof Error
-              ? `auto-advance blocked: ${e.message}`
-              : "auto-advance blocked",
+
+        if (url) {
+          if (previousBlobRef.current && previousBlobRef.current !== c.audioUrl) {
+            URL.revokeObjectURL(previousBlobRef.current);
+          }
+          previousBlobRef.current = c.audioUrl;
+          el.src = url;
+          el.load();
+          try {
+            await el.play();
+          } catch (e) {
+            // iOS 17.2.x src-swap regression — surface "Tap to continue"
+            setBlockedAutoplay(true);
+            setError(
+              e instanceof Error
+                ? `auto-advance blocked (${reason}): ${e.message}`
+                : `auto-advance blocked (${reason})`,
+            );
+          }
+          router.push(
+            `/read/${encodeURIComponent(c.bibleId)}/${encodeURIComponent(c.bookId)}/${next}?mode=podcast`,
+            { scroll: false },
           );
-        });
-        // URL update for shareability — does NOT remount the audio element
-        router.push(
-          `/read/${encodeURIComponent(c.bibleId)}/${encodeURIComponent(c.bookId)}/${next}?mode=podcast`,
-          { scroll: false },
-        );
-      } else {
-        // Preload was not ready — fallback to the autoplay-flag path
-        router.push(
-          `/read/${encodeURIComponent(c.bibleId)}/${encodeURIComponent(c.bookId)}/${next}?mode=podcast&autoplay=1`,
-        );
+        } else {
+          // No URL even after on-demand fetch — fallback to navigate path
+          router.push(
+            `/read/${encodeURIComponent(c.bibleId)}/${encodeURIComponent(c.bookId)}/${next}?mode=podcast&autoplay=1`,
+          );
+        }
+      } finally {
+        // Reset after a tick — the next chapter's onended/near-end trigger
+        // should not be blocked by this same advance.
+        setTimeout(() => {
+          advancingRef.current = false;
+        }, 1000);
+      }
+    }
+
+    el.addEventListener("ended", () => {
+      setPlaying(false);
+      void tryAdvance("ended");
+    });
+
+    // Some iOS Safari builds skip the ended event for blob URLs. Fall back
+    // to a near-end trigger so we never miss the chapter boundary.
+    el.addEventListener("timeupdate", () => {
+      if (!el.duration || !isFinite(el.duration)) return;
+      if (el.currentTime >= el.duration - 0.3) {
+        void tryAdvance("near-end");
       }
     });
 

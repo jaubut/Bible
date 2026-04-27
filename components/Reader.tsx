@@ -205,9 +205,35 @@ export default function Reader({
   ]);
 
   // Push current chapter info to the persistent player whenever it changes.
+  // Includes a fetchNextAudio fallback so the context can pull the next
+  // chapter on-demand inside the natural-end gesture window if preload
+  // wasn't ready (short chapters, slow network, cold TTS).
   useEffect(() => {
     if (mode !== "podcast") return;
     if (!currentBook) return;
+
+    const fetchNextAudio = async (): Promise<string | null> => {
+      try {
+        const res = await fetch("/api/audio", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            bibleId,
+            passageId: `${bookId}.${chapter + 1}`,
+            lang: companionLang,
+            mode: "podcast",
+            voiceA: edgeVoiceA,
+            voiceB: edgeVoiceB,
+          }),
+        });
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        return URL.createObjectURL(blob);
+      } catch {
+        return null;
+      }
+    };
+
     podcast.registerChapter({
       bibleId,
       bookId,
@@ -217,6 +243,7 @@ export default function Reader({
       audioUrl,
       nextAudioUrl,
       autoplay,
+      fetchNextAudio,
     });
   }, [
     mode,
@@ -227,6 +254,9 @@ export default function Reader({
     audioUrl,
     nextAudioUrl,
     autoplay,
+    companionLang,
+    edgeVoiceA,
+    edgeVoiceB,
     currentBook,
     podcast,
   ]);
