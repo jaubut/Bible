@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { tokenize } from "@/lib/tokens";
+import { tokenize, type ManifestToken } from "@/lib/tokens";
 import type { LexiconEntry } from "@/lib/lexicon";
 import TokenPopover from "./TokenPopover";
 
@@ -13,18 +13,24 @@ const CATEGORY_CLASS: Record<LexiconEntry["category"], string> = {
   number: "tk tk-number",
   title: "tk tk-title",
   artifact: "tk tk-artifact",
-  "time-marker": "tk",
-  echo: "tk",
+  "time-marker": "tk tk-title",
+  echo: "tk tk-loanword",
   speech: "tk",
 };
 
-export default function TokenizedText({ text }: { text: string }) {
+export default function TokenizedText({
+  text,
+  manifestTokens,
+}: {
+  text: string;
+  manifestTokens?: ManifestToken[];
+}) {
   const [active, setActive] = useState<{
     text: string;
     entry: LexiconEntry;
   } | null>(null);
 
-  const segments = tokenize(text);
+  const segments = tokenize(text, manifestTokens ?? []);
 
   return (
     <>

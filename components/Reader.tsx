@@ -28,6 +28,7 @@ import { saveLastRead } from "@/lib/last-read";
 import { usePodcast } from "@/components/PodcastContext";
 import Settings from "@/components/Settings";
 import TokenizedText from "@/components/TokenizedText";
+import type { ManifestToken } from "@/lib/tokens";
 
 type Props = {
   bibleId: string;
@@ -72,6 +73,7 @@ export default function Reader({
   const [audioLoading, setAudioLoading] = useState(false);
   const [autoplay, setAutoplay] = useState(true);
   const [tokenDensity, setTokenDensity] = useState<TokenDensity>("moderate");
+  const [manifest, setManifest] = useState<ManifestToken[]>([]);
 
   // Pull live audio state from the persistent context (only meaningful in
   // podcast mode; reading mode keeps using speechSynthesis + segments).
@@ -127,6 +129,38 @@ export default function Reader({
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoplayOnMount, mode, audioUrl]);
+
+  // Fetch the chapter's annotation manifest (Claude Haiku → JSON), cached
+  // server-side per chapter. Non-blocking: verses render with static lexicon
+  // tokens immediately, manifest tokens fade in when ready (~1-2s cold).
+  useEffect(() => {
+    if (!currentBook) return;
+    setManifest([]);
+    const ctrl = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch("/api/annotate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            bibleId,
+            bookId,
+            chapter: String(chapter),
+            bookName: currentBook.name,
+          }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (Array.isArray(json.tokens)) {
+          setManifest(json.tokens);
+        }
+      } catch {
+        /* manifest fetch is best-effort */
+      }
+    })();
+    return () => ctrl.abort();
+  }, [bibleId, bookId, chapter, currentBook]);
 
   function gotoChapter(delta: number) {
     const next = chapter + delta;
@@ -730,17 +764,22 @@ export default function Reader({
                 {s.text}
               </p>
             );
-          return (
-            <p
-              key={i}
-              className={`my-2 ${active ? "read-active" : ""}`}
-            >
-              {s.verse ? (
-                <sup className="mr-1 text-xs text-[color:var(--color-aside)]">{s.verse}</sup>
-              ) : null}
-              <TokenizedText text={s.text} />
-            </p>
-          );
+          {
+            const verseManifest = s.verse
+              ? manifest.filter((m) => m.verse === s.verse)
+              : [];
+            return (
+              <p
+                key={i}
+                className={`my-2 ${active ? "read-active" : ""}`}
+              >
+                {s.verse ? (
+                  <sup className="mr-1 text-xs text-[color:var(--color-aside)]">{s.verse}</sup>
+                ) : null}
+                <TokenizedText text={s.text} manifestTokens={verseManifest} />
+              </p>
+            );
+          }
         })}
       </article>
 
