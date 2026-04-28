@@ -203,6 +203,11 @@ export default function Settings() {
   function applyMode(m: Mode) {
     setMode(m);
     localStorage.setItem(STORAGE_KEYS.mode, m);
+    // Notify open Reader instances in the same tab to refresh and (if needed)
+    // clear a stale ?mode= URL param so the new mode actually takes effect.
+    window.dispatchEvent(
+      new CustomEvent("bible-settings-update", { detail: { key: "mode", value: m } }),
+    );
   }
 
   function applyAutoplay(v: boolean) {
@@ -213,6 +218,11 @@ export default function Settings() {
   function applyTokenDensity(td: TokenDensity) {
     setTokenDensity(td);
     localStorage.setItem(STORAGE_KEYS.tokenDensity, td);
+    window.dispatchEvent(
+      new CustomEvent("bible-settings-update", {
+        detail: { key: "tokenDensity", value: td },
+      }),
+    );
   }
 
   function applyEdgeVoiceA(id: string) {

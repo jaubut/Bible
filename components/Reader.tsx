@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pause, Play, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
-import type { Book } from "@/lib/bible-api";
+import { Pause, Play, Loader2, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import type { Book, Chapter } from "@/lib/bible-api";
 import { parseScript, parsePodcast, type Segment } from "@/lib/script";
 import { defaultPair } from "@/lib/google-voices";
 import {
@@ -30,11 +30,13 @@ import Settings from "@/components/Settings";
 import TokenizedText from "@/components/TokenizedText";
 import type { ManifestToken } from "@/lib/tokens";
 import CrossRefsSheet, { type VerseRef } from "@/components/CrossRefsSheet";
+import ChapterPickerSheet from "@/components/ChapterPickerSheet";
 
 type Props = {
   bibleId: string;
   bookId: string;
   books: Book[];
+  chapters?: Chapter[];
   initialPassageId: string;
   totalChapters?: number;
   modeOverride?: "podcast" | "reading";
@@ -45,6 +47,7 @@ export default function Reader({
   bibleId,
   bookId,
   books,
+  chapters = [],
   initialPassageId,
   totalChapters = 999,
   modeOverride,
@@ -80,6 +83,7 @@ export default function Reader({
     verse: string;
     refs: VerseRef[];
   } | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Pull live audio state from the persistent context (only meaningful in
   // podcast mode; reading mode keeps using speechSynthesis + segments).
@@ -400,10 +404,37 @@ export default function Reader({
     // Also poll on focus — same-tab Settings changes don't fire storage events
     const onFocus = () => refresh();
     window.addEventListener("focus", onFocus);
+
+    // Same-tab Settings changes dispatch a custom event we listen for here.
+    // When the mode flips, also clear a stale ?mode= URL param so the URL
+    // override doesn't keep forcing the old mode.
+    const onSettingsUpdate = (e: Event) => {
+      refresh();
+      const detail = (e as CustomEvent<{ key: string; value: string }>).detail;
+      if (detail?.key === "mode") {
+        try {
+          const url = new URL(window.location.href);
+          if (url.searchParams.has("mode")) {
+            if (detail.value === "podcast") {
+              url.searchParams.set("mode", "podcast");
+            } else {
+              url.searchParams.delete("mode");
+            }
+            url.searchParams.delete("autoplay");
+            window.history.replaceState({}, "", url.toString());
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    window.addEventListener("bible-settings-update", onSettingsUpdate);
+
     return () => {
       off();
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("bible-settings-update", onSettingsUpdate);
     };
   }, []);
 
@@ -662,9 +693,20 @@ export default function Reader({
       </header>
 
       <div className="mb-2">
-        <h1 className="t-section">
-          {currentBook?.name} {chapter}
-        </h1>
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          disabled={chapters.length === 0}
+          className="inline-flex items-baseline gap-1.5 hover:opacity-80 transition disabled:cursor-default disabled:hover:opacity-100"
+          aria-label="Jump to another chapter"
+        >
+          <h1 className="t-section">
+            {currentBook?.name} {chapter}
+          </h1>
+          {chapters.length > 0 && (
+            <ChevronDown size={16} className="text-[color:var(--color-aside)]" />
+          )}
+        </button>
         <div className="t-caption text-[color:var(--color-aside)] mt-1">
           {mode === "podcast" ? (
             <>Podcast mode — two hosts in conversation</>
@@ -982,6 +1024,18 @@ export default function Reader({
           verseLabel={activeVerseRefs.verse}
           refs={activeVerseRefs.refs}
           onClose={() => setActiveVerseRefs(null)}
+        />
+      )}
+
+      {pickerOpen && currentBook && chapters.length > 0 && (
+        <ChapterPickerSheet
+          bibleId={bibleId}
+          bookId={bookId}
+          bookName={currentBook.name}
+          chapters={chapters}
+          currentChapter={chapter}
+          preserveMode={mode === "podcast" ? "podcast" : "reading"}
+          onClose={() => setPickerOpen(false)}
         />
       )}
     </main>

@@ -27,6 +27,7 @@ export default async function ReadChapterPage({
       bibleId={decodedBibleId}
       bookId={decodedBookId}
       books={books}
+      chapters={chapters}
       initialPassageId={passageId}
       totalChapters={totalChapters}
       modeOverride={mode === "podcast" ? "podcast" : undefined}
