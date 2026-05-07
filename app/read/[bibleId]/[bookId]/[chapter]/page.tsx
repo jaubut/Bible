@@ -30,7 +30,9 @@ export default async function ReadChapterPage({
       chapters={chapters}
       initialPassageId={passageId}
       totalChapters={totalChapters}
-      modeOverride={mode === "podcast" ? "podcast" : undefined}
+      modeOverride={
+        mode === "podcast" ? "podcast" : mode === "jesus" ? "jesus" : undefined
+      }
       autoplayOnMount={autoplay === "1"}
     />
   );

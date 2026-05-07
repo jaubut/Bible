@@ -11,7 +11,7 @@ export function isCompanionLang(v: unknown): v is CompanionLang {
   return v === "en" || v === "fr";
 }
 
-export type Mode = "reading" | "podcast";
+export type Mode = "reading" | "podcast" | "jesus";
 
 export const MODES: { id: Mode; name: string; description: string }[] = [
   {
@@ -24,10 +24,15 @@ export const MODES: { id: Mode; name: string; description: string }[] = [
     name: "Podcast",
     description: "Two hosts discuss the passage in conversation.",
   },
+  {
+    id: "jesus",
+    name: "Jesus Bible",
+    description: "Jesus reads, marks, and comments the text himself.",
+  },
 ];
 
 export function isMode(v: unknown): v is Mode {
-  return v === "reading" || v === "podcast";
+  return v === "reading" || v === "podcast" || v === "jesus";
 }
 
 export const THEMES: { id: ThemeId; name: string; description: string }[] = [
@@ -65,6 +70,7 @@ export const STORAGE_KEYS = {
   autoplay: "bible-autoplay",
   tokenDensity: "bible-token-density",
   iosTipDismissed: "bible-ios-tip-dismissed",
+  commentaryCollapsed: "bible-commentary-collapsed",
 } as const;
 
 export type TokenDensity = "minimal" | "moderate" | "dense" | "study";

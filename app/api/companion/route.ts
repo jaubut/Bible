@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { anthropic, COMPANION_MODEL } from "@/lib/anthropic";
 import { bibleApi } from "@/lib/bible-api";
-import { COMPANION_SYSTEM, buildCompanionUserPrompt } from "@/lib/companion-prompt";
+import {
+  COMPANION_SYSTEM,
+  JESUS_SYSTEM,
+  buildCompanionUserPrompt,
+  buildJesusUserPrompt,
+} from "@/lib/companion-prompt";
 import { PODCAST_SYSTEM, buildPodcastUserPrompt } from "@/lib/podcast-prompt";
 import { commentaryKey, getCommentary, putCommentary } from "@/lib/cache";
 
@@ -12,7 +17,7 @@ const Body = z.object({
   passageId: z.string().min(1),
   density: z.enum(["light", "normal", "rich"]).default("normal"),
   lang: z.enum(["en", "fr"]).default("en"),
-  mode: z.enum(["reading", "podcast"]).default("reading"),
+  mode: z.enum(["reading", "podcast", "jesus"]).default("reading"),
 });
 
 export async function POST(req: Request) {
@@ -35,26 +40,34 @@ export async function POST(req: Request) {
 
   const passage = await bibleApi.getPassage(bibleId, passageId);
 
-  const isPodcast = mode === "podcast";
-  const systemText = isPodcast ? PODCAST_SYSTEM : COMPANION_SYSTEM;
-  const userPrompt = isPodcast
-    ? buildPodcastUserPrompt({
-        reference: passage.reference,
-        translation: bibleId,
-        passageText: passage.content,
-        lang,
-      })
-    : buildCompanionUserPrompt({
-        reference: passage.reference,
-        translation: bibleId,
-        passageText: passage.content,
-        density,
-        lang,
-      });
+  const systemText =
+    mode === "podcast" ? PODCAST_SYSTEM : mode === "jesus" ? JESUS_SYSTEM : COMPANION_SYSTEM;
+  const userPrompt =
+    mode === "podcast"
+      ? buildPodcastUserPrompt({
+          reference: passage.reference,
+          translation: bibleId,
+          passageText: passage.content,
+          lang,
+        })
+      : mode === "jesus"
+        ? buildJesusUserPrompt({
+            reference: passage.reference,
+            translation: bibleId,
+            passageText: passage.content,
+            lang,
+          })
+        : buildCompanionUserPrompt({
+            reference: passage.reference,
+            translation: bibleId,
+            passageText: passage.content,
+            density,
+            lang,
+          });
 
   const stream = await anthropic().messages.stream({
     model: COMPANION_MODEL,
-    max_tokens: isPodcast ? 8192 : 4096,
+    max_tokens: mode === "podcast" ? 8192 : 4096,
     system: [
       {
         type: "text",

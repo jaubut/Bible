@@ -474,7 +474,11 @@ export default function Settings() {
               {/* Voice(s) */}
               <section>
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
-                  {mode === "podcast" ? "Podcast voices" : "Voice"}
+                  {mode === "podcast"
+                    ? "Podcast voices"
+                    : mode === "jesus"
+                      ? "Voice of Jesus"
+                      : "Voice"}
                 </h3>
 
                 {voices.length === 0 ? (
@@ -483,9 +487,9 @@ export default function Settings() {
                   </p>
                 ) : (
                   <div className="space-y-4">
-                    {mode === "reading" && (
+                    {(mode === "reading" || mode === "jesus") && (
                       <VoiceRow
-                        label="Narrator"
+                        label={mode === "jesus" ? "Jesus" : "Narrator"}
                         value={voiceURI}
                         onChange={applyVoice}
                         onPreview={preview}
@@ -522,7 +526,7 @@ export default function Settings() {
                       </>
                     )}
 
-                    {mode === "reading" && (
+                    {(mode === "reading" || mode === "jesus") && (
                       <>
                         <p className="text-xs text-[color:var(--color-aside)] leading-relaxed">
                           Tip: install free Premium voices in{" "}

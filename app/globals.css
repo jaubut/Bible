@@ -305,6 +305,73 @@ input, select, textarea {
 .tk-title { background: var(--tk-title-bg); color: var(--tk-title-fg); }
 .tk-artifact { background: var(--tk-artifact-bg); color: var(--tk-artifact-fg); }
 
+/* ─── Jesus Bible mode — visual marks ───────────────────
+   Hand-drawn quality: warm red ink, slightly imperfect lines.
+   Marks are visual ornament only, not interactive.
+*/
+:root,
+[data-theme="parchment"] {
+  --jb-ink: #b04a3a;          /* warm sanguine, like rubrication */
+  --jb-ink-soft: rgba(176, 74, 58, 0.55);
+  --jb-note-bg: rgba(176, 74, 58, 0.06);
+}
+[data-theme="codex"] {
+  --jb-ink: #e08a6a;
+  --jb-ink-soft: rgba(224, 138, 106, 0.55);
+  --jb-note-bg: rgba(224, 138, 106, 0.08);
+}
+[data-theme="sanctuary"] {
+  --jb-ink: #b91c1c;
+  --jb-ink-soft: rgba(185, 28, 28, 0.45);
+  --jb-note-bg: rgba(185, 28, 28, 0.05);
+}
+
+.mk-underline {
+  text-decoration: underline wavy var(--jb-ink-soft);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px;
+}
+
+.mk-circle {
+  position: relative;
+  padding: 0 0.18em;
+  border-radius: 1.2em / 60%;
+  box-shadow: inset 0 0 0 1.5px var(--jb-ink-soft);
+  /* Subtle skew to feel hand-drawn */
+  transform: rotate(-0.4deg);
+  display: inline-block;
+}
+
+.mk-emphasis {
+  color: var(--jb-ink);
+  font-weight: 600;
+  font-style: italic;
+}
+
+.jb-note {
+  position: relative;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.5rem 0.85rem 0.5rem 1.1rem;
+  background: var(--jb-note-bg);
+  border-left: 2px solid var(--jb-ink);
+  border-radius: 0 0.5rem 0.5rem 0;
+  color: var(--color-ink);
+  font-style: italic;
+  font-size: 0.97em;
+  line-height: 1.65;
+}
+.jb-note::before {
+  content: "—";
+  position: absolute;
+  left: 0.4rem;
+  top: 0.5rem;
+  color: var(--jb-ink);
+  font-style: normal;
+}
+.jb-note.read-active {
+  background: color-mix(in srgb, var(--jb-ink) 12%, transparent);
+}
+
 /* ─── Scrollbar polish ───────────────────────────────── */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb {

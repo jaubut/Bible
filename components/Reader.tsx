@@ -3,9 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pause, Play, Loader2, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import {
+  Pause,
+  Play,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import type { Book, Chapter } from "@/lib/bible-api";
-import { parseScript, parsePodcast, type Segment } from "@/lib/script";
+import { parseScript, parsePodcast, parseJesus, type Mark, type Segment } from "@/lib/script";
 import { defaultPair } from "@/lib/google-voices";
 import {
   STORAGE_KEYS,
@@ -39,7 +48,7 @@ type Props = {
   chapters?: Chapter[];
   initialPassageId: string;
   totalChapters?: number;
-  modeOverride?: "podcast" | "reading";
+  modeOverride?: "podcast" | "reading" | "jesus";
   autoplayOnMount?: boolean;
 };
 
@@ -84,6 +93,7 @@ export default function Reader({
     refs: VerseRef[];
   } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [commentaryCollapsed, setCommentaryCollapsed] = useState(false);
 
   // Pull live audio state from the persistent context (only meaningful in
   // podcast mode; reading mode keeps using speechSynthesis + segments).
@@ -146,6 +156,8 @@ export default function Reader({
   useEffect(() => {
     if (!currentBook) return;
     setManifest([]);
+    setVerseRefs([]);
+    if (mode === "jesus") return;
     const ctrl = new AbortController();
     (async () => {
       try {
@@ -175,12 +187,13 @@ export default function Reader({
       }
     })();
     return () => ctrl.abort();
-  }, [bibleId, bookId, chapter, currentBook]);
+  }, [bibleId, bookId, chapter, currentBook, mode]);
 
   function gotoChapter(delta: number) {
     const next = chapter + delta;
     if (next < 1) return;
-    const modeParam = mode === "podcast" ? "?mode=podcast" : "";
+    const modeParam =
+      mode === "podcast" ? "?mode=podcast" : mode === "jesus" ? "?mode=jesus" : "";
     router.push(
       `/read/${encodeURIComponent(bibleId)}/${encodeURIComponent(bookId)}/${next}${modeParam}`,
     );
@@ -376,6 +389,10 @@ export default function Reader({
       const td = localStorage.getItem(STORAGE_KEYS.tokenDensity);
       if (isTokenDensity(td)) setTokenDensity(td);
 
+      // Commentary collapsed state
+      const cc = localStorage.getItem(STORAGE_KEYS.commentaryCollapsed);
+      setCommentaryCollapsed(cc === "1");
+
       // Edge voices for podcast mode
       const def = defaultPair(lang);
       const ea = localStorage.getItem(STORAGE_KEYS.edgeVoiceA) || def.a;
@@ -396,7 +413,8 @@ export default function Reader({
         e.key === STORAGE_KEYS.edgeVoiceA ||
         e.key === STORAGE_KEYS.edgeVoiceB ||
         e.key === STORAGE_KEYS.autoplay ||
-        e.key === STORAGE_KEYS.tokenDensity
+        e.key === STORAGE_KEYS.tokenDensity ||
+        e.key === STORAGE_KEYS.commentaryCollapsed
       )
         refresh();
     };
@@ -414,15 +432,14 @@ export default function Reader({
       if (detail?.key === "mode") {
         try {
           const url = new URL(window.location.href);
-          if (url.searchParams.has("mode")) {
-            if (detail.value === "podcast") {
-              url.searchParams.set("mode", "podcast");
-            } else {
-              url.searchParams.delete("mode");
-            }
-            url.searchParams.delete("autoplay");
-            window.history.replaceState({}, "", url.toString());
+          const v = detail.value;
+          if (v === "podcast" || v === "jesus") {
+            url.searchParams.set("mode", v);
+          } else {
+            url.searchParams.delete("mode");
           }
+          url.searchParams.delete("autoplay");
+          window.history.replaceState({}, "", url.toString());
         } catch {
           /* ignore */
         }
@@ -467,7 +484,8 @@ export default function Reader({
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let acc = "";
-        const parser = mode === "podcast" ? parsePodcast : parseScript;
+        const parser =
+          mode === "podcast" ? parsePodcast : mode === "jesus" ? parseJesus : parseScript;
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
@@ -602,6 +620,17 @@ export default function Reader({
       return;
     }
     const seg = segments[idx];
+
+    // Skip commentary segments when the reader has collapsed them.
+    if (
+      commentaryCollapsed &&
+      (seg.kind === "aside" || seg.kind === "note")
+    ) {
+      queueRef.current = idx + 1;
+      speakNext();
+      return;
+    }
+
     setActiveIdx(idx);
 
     if (seg.kind === "pause") {
@@ -620,7 +649,9 @@ export default function Reader({
       u.rate = rate;
     } else {
       if (selectedVoice) u.voice = selectedVoice;
-      u.rate = rate * (seg.kind === "aside" ? 1.05 : 1);
+      u.rate =
+        rate *
+        (seg.kind === "aside" ? 1.05 : seg.kind === "note" ? 0.95 : 1);
     }
     u.pitch = 1.0;
     u.volume = 1;
@@ -669,6 +700,54 @@ export default function Reader({
     podcast.skipBack();
   }
 
+  function toggleCommentary() {
+    const next = !commentaryCollapsed;
+    setCommentaryCollapsed(next);
+    localStorage.setItem(STORAGE_KEYS.commentaryCollapsed, next ? "1" : "0");
+    // If we collapse mid-playback, drop the user past any aside/note we'd
+    // otherwise be about to speak. The next speakNext() iteration handles it.
+  }
+
+  function applyMarks(text: string, marks?: Mark[]): React.ReactNode {
+    if (!marks?.length) return text;
+    type Interval = { start: number; end: number; style: Mark["style"] };
+    const intervals: Interval[] = [];
+    const sorted = [...marks].sort((a, b) => b.target.length - a.target.length);
+    for (const mk of sorted) {
+      if (!mk.target) continue;
+      let from = 0;
+      while (true) {
+        const idx = text.indexOf(mk.target, from);
+        if (idx < 0) break;
+        const overlap = intervals.some(
+          (iv) => !(idx + mk.target.length <= iv.start || idx >= iv.end),
+        );
+        if (!overlap) {
+          intervals.push({
+            start: idx,
+            end: idx + mk.target.length,
+            style: mk.style,
+          });
+        }
+        from = idx + mk.target.length;
+      }
+    }
+    intervals.sort((a, b) => a.start - b.start);
+    const out: React.ReactNode[] = [];
+    let cursor = 0;
+    intervals.forEach((iv, i) => {
+      if (iv.start > cursor) out.push(text.slice(cursor, iv.start));
+      out.push(
+        <span key={`mk-${i}`} className={`mk-${iv.style}`}>
+          {text.slice(iv.start, iv.end)}
+        </span>,
+      );
+      cursor = iv.end;
+    });
+    if (cursor < text.length) out.push(text.slice(cursor));
+    return <>{out}</>;
+  }
+
   function fmtTime(s: number): string {
     if (!isFinite(s) || s < 0) return "0:00";
     const m = Math.floor(s / 60);
@@ -710,29 +789,50 @@ export default function Reader({
         <div className="t-caption text-[color:var(--color-aside)] mt-1">
           {mode === "podcast" ? (
             <>Podcast mode — two hosts in conversation</>
+          ) : mode === "jesus" ? (
+            <>Jesus Bible — read and marked by Jesus himself</>
           ) : (
             <>Reading mode — verses with cultural asides</>
           )}
         </div>
       </div>
 
-      {mode === "reading" && (
-        <div className="mb-4 flex items-center gap-2">
-          <span className="t-caption text-[color:var(--color-aside)]">
-            Density:
-          </span>
-          <select
-            value={density}
-            onChange={(e) =>
-              setDensity(e.target.value as "light" | "normal" | "rich")
+      {(mode === "reading" || mode === "jesus") && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+          {mode === "reading" && (
+            <div className="flex items-center gap-2">
+              <span className="t-caption text-[color:var(--color-aside)]">Density:</span>
+              <select
+                value={density}
+                onChange={(e) =>
+                  setDensity(e.target.value as "light" | "normal" | "rich")
+                }
+                className="rounded-md bg-transparent text-sm py-1.5 pl-1 pr-6 hover:bg-[color:var(--color-tint)] cursor-pointer"
+                aria-label="Commentary density"
+              >
+                <option value="light">Light</option>
+                <option value="normal">Normal</option>
+                <option value="rich">Rich</option>
+              </select>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={toggleCommentary}
+            className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-divider)] px-3 py-1.5 text-xs hover:bg-[color:var(--color-tint)] transition"
+            aria-pressed={commentaryCollapsed}
+            aria-label={
+              commentaryCollapsed ? "Show commentary" : "Hide commentary"
             }
-            className="rounded-md bg-transparent text-sm py-1.5 pl-1 pr-6 hover:bg-[color:var(--color-tint)] cursor-pointer"
-            aria-label="Commentary density"
+            title={
+              commentaryCollapsed
+                ? "Show commentary"
+                : "Hide commentary — verses only"
+            }
           >
-            <option value="light">Light</option>
-            <option value="normal">Normal</option>
-            <option value="rich">Rich</option>
-          </select>
+            {commentaryCollapsed ? <EyeOff size={13} /> : <Eye size={13} />}
+            <span>{commentaryCollapsed ? "Verses only" : "Hide commentary"}</span>
+          </button>
         </div>
       )}
 
@@ -806,7 +906,8 @@ export default function Reader({
               </div>
             );
           }
-          if (s.kind === "aside")
+          if (s.kind === "aside") {
+            if (commentaryCollapsed) return null;
             return (
               <p
                 key={i}
@@ -817,13 +918,28 @@ export default function Reader({
                 {s.text}
               </p>
             );
+          }
+          if (s.kind === "note") {
+            if (commentaryCollapsed) return null;
+            return (
+              <p
+                key={i}
+                className={`jb-note ${active ? "read-active" : ""}`}
+              >
+                {s.text}
+              </p>
+            );
+          }
           {
-            const verseManifest = s.verse
-              ? manifest.filter((m) => m.verse === s.verse)
-              : [];
-            const refsForVerse = s.verse
-              ? verseRefs.find((vr) => vr.verse === s.verse)?.refs ?? []
-              : [];
+            const isJesusMode = mode === "jesus";
+            const verseManifest =
+              !isJesusMode && s.verse
+                ? manifest.filter((m) => m.verse === s.verse)
+                : [];
+            const refsForVerse =
+              !isJesusMode && s.verse
+                ? verseRefs.find((vr) => vr.verse === s.verse)?.refs ?? []
+                : [];
             const inStudy = tokenDensity === "study";
             const verseLabel = s.verse
               ? `${currentBook?.name ?? ""} ${chapter}:${s.verse}`
@@ -834,7 +950,7 @@ export default function Reader({
                 className={`my-2 ${active ? "read-active" : ""}`}
               >
                 {s.verse ? (
-                  inStudy && refsForVerse.length > 0 ? (
+                  !isJesusMode && inStudy && refsForVerse.length > 0 ? (
                     <button
                       type="button"
                       onClick={() =>
@@ -855,11 +971,15 @@ export default function Reader({
                     </sup>
                   )
                 ) : null}
-                <TokenizedText
-                  text={s.text}
-                  manifestTokens={verseManifest}
-                  showStrongs={inStudy}
-                />
+                {isJesusMode ? (
+                  applyMarks(s.text, s.marks)
+                ) : (
+                  <TokenizedText
+                    text={s.text}
+                    manifestTokens={verseManifest}
+                    showStrongs={inStudy}
+                  />
+                )}
               </p>
             );
           }
@@ -1034,7 +1154,7 @@ export default function Reader({
           bookName={currentBook.name}
           chapters={chapters}
           currentChapter={chapter}
-          preserveMode={mode === "podcast" ? "podcast" : "reading"}
+          preserveMode={mode}
           onClose={() => setPickerOpen(false)}
         />
       )}

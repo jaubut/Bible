@@ -18,14 +18,19 @@ export default function ChapterPickerSheet({
   bookName: string;
   chapters: Chapter[];
   currentChapter: number;
-  preserveMode?: "podcast" | "reading";
+  preserveMode?: "podcast" | "reading" | "jesus";
   onClose: () => void;
 }) {
   const router = useRouter();
   const real = chapters.filter((c) => /^\d+$/.test(c.number));
 
   function go(chapterNum: string) {
-    const modeParam = preserveMode === "podcast" ? "?mode=podcast" : "";
+    const modeParam =
+      preserveMode === "podcast"
+        ? "?mode=podcast"
+        : preserveMode === "jesus"
+          ? "?mode=jesus"
+          : "";
     router.push(
       `/read/${encodeURIComponent(bibleId)}/${encodeURIComponent(bookId)}/${chapterNum}${modeParam}`,
     );
