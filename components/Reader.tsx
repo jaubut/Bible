@@ -12,6 +12,8 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  X,
+  Plus,
 } from "lucide-react";
 import type { Book, Chapter } from "@/lib/bible-api";
 import { parseScript, parsePodcast, parseJesus, type Mark, type Segment } from "@/lib/script";
@@ -40,6 +42,7 @@ import TokenizedText from "@/components/TokenizedText";
 import type { ManifestToken } from "@/lib/tokens";
 import CrossRefsSheet, { type VerseRef } from "@/components/CrossRefsSheet";
 import ChapterPickerSheet from "@/components/ChapterPickerSheet";
+import MarkPopover from "@/components/MarkPopover";
 
 type Props = {
   bibleId: string;
@@ -94,6 +97,13 @@ export default function Reader({
   } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [commentaryCollapsed, setCommentaryCollapsed] = useState(false);
+  const [dismissed, setDismissed] = useState<Set<number>>(new Set());
+  const [activeMark, setActiveMark] = useState<{
+    text: string;
+    style: Mark["style"];
+    comment: string;
+    verseLabel?: string;
+  } | null>(null);
 
   // Pull live audio state from the persistent context (only meaningful in
   // podcast mode; reading mode keeps using speechSynthesis + segments).
@@ -462,6 +472,8 @@ export default function Reader({
     setSegments([]);
     setScript("");
     setActiveIdx(null);
+    setDismissed(new Set());
+    setActiveMark(null);
     setLoading(true);
     setError(null);
 
@@ -621,10 +633,11 @@ export default function Reader({
     }
     const seg = segments[idx];
 
-    // Skip commentary segments when the reader has collapsed them.
+    // Skip commentary segments when the reader has collapsed them
+    // (globally or per-block).
     if (
-      commentaryCollapsed &&
-      (seg.kind === "aside" || seg.kind === "note")
+      (seg.kind === "aside" || seg.kind === "note") &&
+      (commentaryCollapsed || dismissed.has(idx))
     ) {
       queueRef.current = idx + 1;
       speakNext();
@@ -708,9 +721,18 @@ export default function Reader({
     // otherwise be about to speak. The next speakNext() iteration handles it.
   }
 
-  function applyMarks(text: string, marks?: Mark[]): React.ReactNode {
+  function applyMarks(
+    text: string,
+    marks: Mark[] | undefined,
+    verseLabel?: string,
+  ): React.ReactNode {
     if (!marks?.length) return text;
-    type Interval = { start: number; end: number; style: Mark["style"] };
+    type Interval = {
+      start: number;
+      end: number;
+      style: Mark["style"];
+      comment?: string;
+    };
     const intervals: Interval[] = [];
     const sorted = [...marks].sort((a, b) => b.target.length - a.target.length);
     for (const mk of sorted) {
@@ -727,6 +749,7 @@ export default function Reader({
             start: idx,
             end: idx + mk.target.length,
             style: mk.style,
+            comment: mk.comment,
           });
         }
         from = idx + mk.target.length;
@@ -737,15 +760,54 @@ export default function Reader({
     let cursor = 0;
     intervals.forEach((iv, i) => {
       if (iv.start > cursor) out.push(text.slice(cursor, iv.start));
-      out.push(
-        <span key={`mk-${i}`} className={`mk-${iv.style}`}>
-          {text.slice(iv.start, iv.end)}
-        </span>,
-      );
+      const inner = text.slice(iv.start, iv.end);
+      if (iv.comment) {
+        out.push(
+          <button
+            key={`mk-${i}`}
+            type="button"
+            className={`mk-${iv.style} mk-interactive`}
+            onClick={() =>
+              setActiveMark({
+                text: inner,
+                style: iv.style,
+                comment: iv.comment ?? "",
+                verseLabel,
+              })
+            }
+            aria-label={`What Jesus says about "${inner}"`}
+          >
+            {inner}
+          </button>,
+        );
+      } else {
+        out.push(
+          <span key={`mk-${i}`} className={`mk-${iv.style}`}>
+            {inner}
+          </span>,
+        );
+      }
       cursor = iv.end;
     });
     if (cursor < text.length) out.push(text.slice(cursor));
     return <>{out}</>;
+  }
+
+  function dismissBlock(idx: number) {
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(idx);
+      return next;
+    });
+  }
+
+  function restoreBlock(idx: number) {
+    setDismissed((prev) => {
+      if (!prev.has(idx)) return prev;
+      const next = new Set(prev);
+      next.delete(idx);
+      return next;
+    });
   }
 
   function fmtTime(s: number): string {
@@ -908,26 +970,49 @@ export default function Reader({
           }
           if (s.kind === "aside") {
             if (commentaryCollapsed) return null;
+            if (dismissed.has(i)) {
+              return (
+                <CommentaryPill
+                  key={i}
+                  variant="aside"
+                  onClick={() => restoreBlock(i)}
+                />
+              );
+            }
             return (
-              <p
-                key={i}
-                className={`my-3 italic text-[color:var(--color-aside)] border-l-2 border-[color:var(--color-divider)] pl-3 ${
-                  active ? "read-active" : ""
-                }`}
-              >
-                {s.text}
-              </p>
+              <div key={i} className="group relative my-3">
+                <p
+                  className={`italic text-[color:var(--color-aside)] border-l-2 border-[color:var(--color-divider)] pl-3 pr-8 ${
+                    active ? "read-active" : ""
+                  }`}
+                >
+                  {s.text}
+                </p>
+                <DismissButton onClick={() => dismissBlock(i)} />
+              </div>
             );
           }
           if (s.kind === "note") {
             if (commentaryCollapsed) return null;
+            if (dismissed.has(i)) {
+              return (
+                <CommentaryPill
+                  key={i}
+                  variant="note"
+                  verse={s.verse}
+                  onClick={() => restoreBlock(i)}
+                />
+              );
+            }
             return (
-              <p
-                key={i}
-                className={`jb-note ${active ? "read-active" : ""}`}
-              >
-                {s.text}
-              </p>
+              <div key={i} className="group relative">
+                <p
+                  className={`jb-note pr-8 ${active ? "read-active" : ""}`}
+                >
+                  {s.text}
+                </p>
+                <DismissButton onClick={() => dismissBlock(i)} variant="jesus" />
+              </div>
             );
           }
           {
@@ -972,7 +1057,7 @@ export default function Reader({
                   )
                 ) : null}
                 {isJesusMode ? (
-                  applyMarks(s.text, s.marks)
+                  applyMarks(s.text, s.marks, verseLabel)
                 ) : (
                   <TokenizedText
                     text={s.text}
@@ -1158,6 +1243,66 @@ export default function Reader({
           onClose={() => setPickerOpen(false)}
         />
       )}
+
+      {activeMark && (
+        <MarkPopover
+          text={activeMark.text}
+          style={activeMark.style}
+          comment={activeMark.comment}
+          verseLabel={activeMark.verseLabel}
+          onClose={() => setActiveMark(null)}
+        />
+      )}
     </main>
+  );
+}
+
+function DismissButton({
+  onClick,
+  variant,
+}: {
+  onClick: () => void;
+  variant?: "jesus";
+}): React.ReactElement {
+  const color =
+    variant === "jesus" ? "var(--jb-ink)" : "var(--color-aside)";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="absolute top-1 right-0 inline-flex h-7 w-7 items-center justify-center rounded-full opacity-0 group-hover:opacity-70 focus:opacity-100 hover:opacity-100 hover:bg-[color:var(--color-tint)] transition"
+      style={{ color }}
+      aria-label="Hide this commentary"
+      title="Hide this commentary"
+    >
+      <X size={14} />
+    </button>
+  );
+}
+
+function CommentaryPill({
+  variant,
+  verse,
+  onClick,
+}: {
+  variant: "aside" | "note";
+  verse?: string;
+  onClick: () => void;
+}): React.ReactElement {
+  const isNote = variant === "note";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="my-2 inline-flex items-center gap-1.5 rounded-full border border-dashed px-2.5 py-1 text-[11px] uppercase tracking-wide transition hover:bg-[color:var(--color-tint)]"
+      style={{
+        borderColor: isNote ? "var(--jb-ink)" : "var(--color-divider)",
+        color: isNote ? "var(--jb-ink)" : "var(--color-aside)",
+      }}
+      aria-label={isNote ? "Show note" : "Show commentary"}
+    >
+      <Plus size={11} />
+      <span>{isNote ? `note${verse ? ` · v.${verse}` : ""}` : "commentary"}</span>
+    </button>
   );
 }

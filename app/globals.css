@@ -348,6 +348,32 @@ input, select, textarea {
   font-style: italic;
 }
 
+/* When a mark has a comment from Jesus, it becomes a button.
+   Reset native button styling so the visual mark style stays clean,
+   add a hover affordance and an accessible focus ring. */
+button.mk-interactive {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: filter 160ms ease, background-color 160ms ease;
+}
+button.mk-interactive.mk-emphasis {
+  /* preserve emphasis colour from class */
+  color: var(--jb-ink);
+}
+button.mk-interactive:hover {
+  filter: brightness(0.95);
+  background-color: color-mix(in srgb, var(--jb-ink) 8%, transparent);
+}
+button.mk-interactive:focus-visible {
+  outline: 2px solid var(--jb-ink);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .jb-note {
   position: relative;
   margin: 0.5rem 0 0.75rem;

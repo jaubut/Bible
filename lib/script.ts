@@ -3,6 +3,7 @@ export type MarkStyle = "underline" | "circle" | "emphasis";
 export interface Mark {
   target: string;
   style: MarkStyle;
+  comment?: string;
 }
 
 export type Segment =
@@ -94,7 +95,7 @@ export function parseJesus(input: string): Segment[] {
       const style = ATTR_STYLE.exec(attrs)?.[1];
       if (verse && target && isMarkStyle(style)) {
         const arr = marksByVerse.get(verse) ?? [];
-        arr.push({ target, style });
+        arr.push(body ? { target, style, comment: body } : { target, style });
         marksByVerse.set(verse, arr);
       }
     }
