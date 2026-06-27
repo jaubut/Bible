@@ -60,28 +60,47 @@ import {
   listExtraChapters,
   getExtraPassage,
 } from "./extra-books";
+import {
+  isLocalBibleId,
+  listLocalBibles,
+  listLocalBooks,
+  listLocalChapters,
+  getLocalPassage,
+} from "./local-bibles";
 
 export const bibleApi = {
   listBibles: async (lang?: string): Promise<Bible[]> => {
     const remote = await get<Bible[]>(
       lang ? `/bibles?language=${encodeURIComponent(lang)}` : "/bibles",
     );
-    // Append our public-domain Pseudepigrapha bibles when no language filter
-    // is set or when filtering for English.
+    // Append our bundled public-domain bibles when no language filter is set or
+    // when filtering for English: full local canons (e.g. the 1812 KJVA) surface
+    // as normal English versions; the single-work Pseudepigrapha are filtered to
+    // their own tab downstream.
     if (!lang || lang === "eng") {
-      return [...remote, ...listExtraBibles()];
+      return [...remote, ...listLocalBibles(), ...listExtraBibles()];
     }
     return remote;
   },
   listBooks: (bibleId: string): Promise<Book[]> => {
+    if (isLocalBibleId(bibleId)) return Promise.resolve(listLocalBooks(bibleId));
     if (isExtraBibleId(bibleId)) return Promise.resolve(listExtraBooks(bibleId));
     return get<Book[]>(`/bibles/${bibleId}/books`);
   },
   listChapters: (bibleId: string, bookId: string): Promise<Chapter[]> => {
+    if (isLocalBibleId(bibleId))
+      return Promise.resolve(listLocalChapters(bibleId, bookId));
     if (isExtraBibleId(bibleId)) return Promise.resolve(listExtraChapters(bibleId));
     return get<Chapter[]>(`/bibles/${bibleId}/books/${bookId}/chapters`);
   },
   getPassage: (bibleId: string, passageId: string): Promise<Passage> => {
+    if (isLocalBibleId(bibleId)) {
+      const p = getLocalPassage(bibleId, passageId);
+      if (!p) {
+        return Promise.reject(new Error(`Passage not found: ${passageId}`));
+      }
+      return Promise.resolve(p);
+    }
     if (isExtraBibleId(bibleId)) {
       const p = getExtraPassage(bibleId, passageId);
       if (!p) {
