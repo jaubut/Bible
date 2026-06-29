@@ -73,8 +73,10 @@ export const bibleApi = {
     const remote = await get<Bible[]>(
       lang ? `/bibles?language=${encodeURIComponent(lang)}` : "/bibles",
     );
-    // Append our bundled public-domain bibles (full local canons + single-work
-    // Pseudepigrapha) when no language filter is set or when filtering English.
+    // Append our bundled public-domain bibles when no language filter is set or
+    // when filtering for English: full local canons (e.g. the 1812 KJVA) surface
+    // as normal English versions; the single-work Pseudepigrapha are filtered to
+    // their own tab downstream.
     if (!lang || lang === "eng") {
       return [...remote, ...listLocalBibles(), ...listExtraBibles()];
     }
