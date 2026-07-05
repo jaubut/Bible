@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Book } from "@/lib/bible-api";
+import { getCanonInfo } from "@/lib/canon";
 
 // Group books by canonical division (rough OT / NT split for English/canonical
 // translations). For non-canonical structures (e.g. extra-books with one book)
@@ -35,12 +36,23 @@ const NT_NAMES = new Set([
   "Revelation",
 ]);
 
-function classify(books: Book[]): { ot: Book[]; nt: Book[]; other: Book[] } {
+function classify(books: Book[]): {
+  ot: Book[];
+  apocrypha: Book[];
+  nt: Book[];
+  other: Book[];
+} {
   const ot: Book[] = [];
+  const apocrypha: Book[] = [];
   const nt: Book[] = [];
   const other: Book[] = [];
   for (const b of books) {
-    if (NT_NAMES.has(b.name)) nt.push(b);
+    // Prefer canon metadata keyed by USFM id — works for any translation
+    // language. Name lists remain as fallback for non-USFM ids.
+    const canon = getCanonInfo(b.id);
+    if (canon?.group === "tanakh") ot.push(b);
+    else if (canon?.group === "deuterocanon") apocrypha.push(b);
+    else if (canon?.group === "nt" || NT_NAMES.has(b.name)) nt.push(b);
     else if (
       [
         "Genesis",
@@ -90,7 +102,7 @@ function classify(books: Book[]): { ot: Book[]; nt: Book[]; other: Book[] } {
       other.push(b);
     }
   }
-  return { ot, nt, other };
+  return { ot, apocrypha, nt, other };
 }
 
 export default function BookGrid({
@@ -100,11 +112,14 @@ export default function BookGrid({
   bibleId: string;
   books: Book[];
 }) {
-  const { ot, nt, other } = classify(books);
+  const { ot, apocrypha, nt, other } = classify(books);
 
   return (
     <div className="space-y-10">
       {ot.length > 0 && <BookSection title="Old Testament" books={ot} bibleId={bibleId} />}
+      {apocrypha.length > 0 && (
+        <BookSection title="Apocrypha" books={apocrypha} bibleId={bibleId} />
+      )}
       {nt.length > 0 && <BookSection title="New Testament" books={nt} bibleId={bibleId} />}
       {other.length > 0 && (
         <BookSection

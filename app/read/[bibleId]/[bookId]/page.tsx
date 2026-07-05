@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { bibleApi } from "@/lib/bible-api";
+import CanonNote from "@/components/CanonNote";
 import ChapterGrid from "@/components/ChapterGrid";
 import Settings from "@/components/Settings";
 
@@ -77,6 +78,8 @@ export default async function BookHubPage({
           </Link>
         </div>
       </section>
+
+      <CanonNote bookId={decodedBookId} />
 
       <section>
         <h2 className="t-caption font-semibold uppercase tracking-wide text-[color:var(--color-aside)] mb-3">
