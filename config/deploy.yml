@@ -1,0 +1,27 @@
+# Side-by-side test on the OVH VPS, sharing kamal-proxy with other apps.
+# No API keys: the bundled 1812 KJVA text works, API-backed Bibles and the AI
+# companion don't. The SQLite files are caches, so there's no volume.
+service: bible
+image: jaubut/bible
+
+servers:
+  web:
+    - 148.113.247.135
+
+proxy:
+  ssl: true
+  host: bible.148.113.247.135.sslip.io
+  app_port: 3000
+  healthcheck:
+    path: /
+    interval: 2
+    timeout: 5
+
+registry:
+  server: localhost:5555
+
+builder:
+  arch: amd64
+
+ssh:
+  user: ubuntu
