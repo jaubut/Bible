@@ -1,6 +1,6 @@
 # Side-by-side test on the OVH VPS, sharing kamal-proxy with other apps.
-# No API keys: the bundled 1812 KJVA text works, API-backed Bibles and the AI
-# companion don't. The SQLite files are caches, so there's no volume.
+# API-backed Bibles use BIBLE_API_KEY. No Anthropic key, so the AI companion
+# doesn't work. The SQLite files are caches, so there's no volume.
 service: bible
 image: jaubut/bible
 
@@ -25,3 +25,7 @@ builder:
 
 ssh:
   user: ubuntu
+
+env:
+  secret:
+    - BIBLE_API_KEY
