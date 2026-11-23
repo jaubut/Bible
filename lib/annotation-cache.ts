@@ -1,17 +1,17 @@
-// SQLite cache for chapter annotation manifests, stored on the Railway
-// volume at /app/data (or ./data locally). Schema is independent from the
-// existing companion text cache so we can iterate on the manifest format.
+// SQLite cache for chapter annotation manifests, stored in the runtime
+// data directory (/var/data/bible in production or ./data locally). Schema is
+// independent from the existing companion text cache so we can iterate on the
+// manifest format.
 
 import Database from "better-sqlite3";
-import { mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { getRuntimeDataDir } from "./runtime-data";
 
 let _db: Database.Database | null = null;
 
 function db() {
   if (_db) return _db;
-  const root = existsSync("/app/data") ? "/app/data" : join(process.cwd(), "data");
-  mkdirSync(root, { recursive: true });
+  const root = getRuntimeDataDir();
   _db = new Database(join(root, "annotations.db"));
   _db.pragma("journal_mode = WAL");
   _db.exec(`

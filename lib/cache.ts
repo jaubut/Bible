@@ -1,13 +1,12 @@
 import Database from "better-sqlite3";
-import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { getRuntimeDataDir } from "./runtime-data";
 
 let _db: Database.Database | null = null;
 
 function db() {
   if (_db) return _db;
-  const dir = join(process.cwd(), "data");
-  mkdirSync(dir, { recursive: true });
+  const dir = getRuntimeDataDir();
   _db = new Database(join(dir, "companion.db"));
   _db.pragma("journal_mode = WAL");
   _db.exec(`
