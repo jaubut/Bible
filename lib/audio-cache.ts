@@ -1,13 +1,15 @@
 import { mkdirSync, existsSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
+import { getRuntimeDataDir } from "./runtime-data";
 
 function audioDir(): string {
-  // /app/data is mounted as a Railway volume in production.
-  // Fallback to ./data in local dev.
-  const root = existsSync("/app/data") ? "/app/data" : join(process.cwd(), "data");
+  // Runtime data dir (/var/data/bible in production, ./data in local dev).
+  const root = getRuntimeDataDir();
   const dir = join(root, "audio");
-  mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
   return dir;
 }
 

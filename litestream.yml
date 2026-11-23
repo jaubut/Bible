@@ -1,0 +1,9 @@
+dbs:
+  - path: /var/data/bible/companion.db
+    replicas:
+      - url: gcs://${LITESTREAM_BUCKET}/bible-companion/replicas/companion.db
+        sync-interval: 1s
+  - path: /var/data/bible/annotations.db
+    replicas:
+      - url: gcs://${LITESTREAM_BUCKET}/bible-companion/replicas/annotations.db
+        sync-interval: 1s
